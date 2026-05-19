@@ -18,11 +18,11 @@ interface RealMatch {
   awayTeam: string;
   awayLogo: string;
   startTime: string;
+  matchDate: string; // תאריך המשחק (לסינון ולהגבלת ג'וקר)
   propQuestion: string;
   isLocked: boolean;
 }
 
-// מאגר שאלות בונוס דינמיות
 const PROP_QUESTIONS = [
   "האם יובקעו מעל 2.5 שערים במשחק?",
   "האם שתי הקבוצות יבקיעו (BTTS)?",
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [realMatches, setRealMatches] = useState<RealMatch[]>([]);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("all"); // סטייט לפילטרים
   const router = useRouter();
 
   useEffect(() => {
@@ -88,16 +89,13 @@ export default function Dashboard() {
 
             const dateObj = new Date(event.date);
             const formattedDate = dateObj.toLocaleString('he-IL', {
-              weekday: 'short', 
-              month: 'numeric', 
-              day: 'numeric', 
-              hour: '2-digit', 
-              minute: '2-digit'
+              weekday: 'short', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
-
+            
+            // יצירת מחרוזת תאריך נקי (YYYY-MM-DD) לשימוש בסינון ובהגבלת הג'וקר
+            const matchDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
             const isLocked = dateObj < new Date();
             
-            // בחירת שאלה דינמית מבוססת על ה-ID של המשחק (כדי שתהיה קבועה לכל משתמש לאותו משחק)
             const numericId = parseInt(event.id.replace(/\D/g, '') || "0");
             const questionIndex = numericId % PROP_QUESTIONS.length;
 
@@ -108,6 +106,7 @@ export default function Dashboard() {
               awayTeam: awayCompetitor.team.displayName,
               awayLogo: awayCompetitor.team.logo || "",
               startTime: formattedDate,
+              matchDate: matchDateStr, // שמירת התאריך הנקי
               propQuestion: PROP_QUESTIONS[questionIndex],
               isLocked: isLocked
             };
@@ -125,6 +124,19 @@ export default function Dashboard() {
     fetchESPNMatches();
   }, []);
 
+  // לוגיקת הסינון
+  const filteredMatches = realMatches.filter(match => {
+    if (activeFilter === "all") return true;
+    if (activeFilter === "open") return !match.isLocked;
+    if (activeFilter === "locked") return match.isLocked;
+    if (activeFilter === "today") {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      return match.matchDate === todayStr;
+    }
+    return true;
+  });
+
   if (loadingUser) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0B0F19]">
@@ -139,7 +151,7 @@ export default function Dashboard() {
 
       <div className="relative max-w-5xl mx-auto p-4 md:p-8 space-y-8">
         
-        <header className="flex items-center justify-between bg-[#151D30]/80 backdrop-blur-xl p-4 md:p-5 rounded-3xl border border-slate-700/40 shadow-2xl">
+        <header className="flex items-center justify-between bg-[#151D30]/80 backdrop-blur-xl p-4 md:p-5 rounded-3xl border border-slate-700/40 shadow-2xl overflow-hidden">
           <div className="flex items-center gap-4">
             <div className="relative">
               <Avatar className="h-14 w-14 border-2 border-blue-500/50 shadow-lg shadow-blue-500/20">
@@ -159,7 +171,7 @@ export default function Dashboard() {
           
           <div className="flex items-center gap-2">
             <Link href="/rules">
-              <Button variant="outline" className="text-slate-200 bg-[#111827] hover:bg-slate-800 hover:text-white rounded-xl border border-slate-700/50 font-bold transition-all shadow-sm">
+              <Button variant="outline" className="hidden sm:flex text-slate-200 bg-[#111827] hover:bg-slate-800 hover:text-white rounded-xl border border-slate-700/50 font-bold transition-all shadow-sm">
                 חוקים וניקוד 📖
               </Button>
             </Link>
@@ -184,27 +196,55 @@ export default function Dashboard() {
           </TabsList>
           
           <TabsContent value="matches" className="space-y-6 focus-visible:outline-hidden">
-            <div className="flex justify-between items-center px-2">
-              <div>
-                <h3 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">משחקים קרובים</h3>
-                <p className="text-xs font-bold text-slate-500 mt-1">עדכון חי מהשרתים</p>
-              </div>
-              {loadingMatches && (
-                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
-                  <span className="text-xs text-blue-400 font-black tracking-wider">LIVE DATA</span>
+            
+            {/* שורת הפילטרים החדשה */}
+            <div className="flex flex-col gap-4 px-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">משחקים קרובים</h3>
+                  <p className="text-xs font-bold text-slate-500 mt-1">עדכון חי מהשרתים</p>
                 </div>
-              )}
+                {loadingMatches && (
+                  <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                    <span className="text-xs text-blue-400 font-black tracking-wider">LIVE DATA</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <Button 
+                  variant={activeFilter === "all" ? "default" : "outline"}
+                  onClick={() => setActiveFilter("all")}
+                  className={`rounded-full font-bold px-5 border ${activeFilter === "all" ? "bg-blue-600 text-white border-blue-500" : "bg-[#111827] text-slate-400 border-slate-700 hover:bg-slate-800"}`}
+                >הכל</Button>
+                <Button 
+                  variant={activeFilter === "today" ? "default" : "outline"}
+                  onClick={() => setActiveFilter("today")}
+                  className={`rounded-full font-bold px-5 border ${activeFilter === "today" ? "bg-blue-600 text-white border-blue-500" : "bg-[#111827] text-slate-400 border-slate-700 hover:bg-slate-800"}`}
+                >משחקי היום</Button>
+                <Button 
+                  variant={activeFilter === "open" ? "default" : "outline"}
+                  onClick={() => setActiveFilter("open")}
+                  className={`rounded-full font-bold px-5 border ${activeFilter === "open" ? "bg-blue-600 text-white border-blue-500" : "bg-[#111827] text-slate-400 border-slate-700 hover:bg-slate-800"}`}
+                >פתוחים לניחוש</Button>
+                <Button 
+                  variant={activeFilter === "locked" ? "default" : "outline"}
+                  onClick={() => setActiveFilter("locked")}
+                  className={`rounded-full font-bold px-5 border ${activeFilter === "locked" ? "bg-blue-600 text-white border-blue-500" : "bg-[#111827] text-slate-400 border-slate-700 hover:bg-slate-800"}`}
+                >הסתיימו / ננעלו</Button>
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {!loadingMatches && realMatches.length === 0 && (
+              {!loadingMatches && filteredMatches.length === 0 && (
                 <div className="col-span-full text-center text-slate-500 py-16 bg-[#151D30]/20 rounded-3xl border border-slate-800 border-dashed">
-                  לא נמצאו משחקים פעילים בטווח הזמן שנבחר
+                  לא נמצאו משחקים בקטגוריה זו.
                 </div>
               )}
               
-              {realMatches.map((match) => (
+              {/* מרנדרים עכשיו את הרשימה המסוננת (filteredMatches) */}
+              {filteredMatches.map((match) => (
                 <MatchCard 
                   key={match.id}
                   userId={user?.id}
@@ -214,6 +254,7 @@ export default function Dashboard() {
                   awayTeam={match.awayTeam}
                   awayLogo={match.awayLogo}
                   startTime={match.startTime}
+                  matchDate={match.matchDate} // העברת התאריך לכרטיסייה
                   propQuestion={match.propQuestion}
                   isLocked={match.isLocked}
                 />
@@ -222,9 +263,14 @@ export default function Dashboard() {
           </TabsContent>
           
           <TabsContent value="leaderboard" className="bg-[#151D30]/40 border border-slate-700/40 p-6 rounded-3xl shadow-2xl backdrop-blur-md focus-visible:outline-hidden">
-            <div className="mb-8">
-              <h3 className="text-2xl font-black bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">טבלת האליפות</h3>
-              <p className="text-xs font-bold text-slate-500 mt-1">הטבלה מתעדכנת אוטומטית עם סיום המשחקים</p>
+            <div className="mb-8 flex justify-between items-end">
+              <div>
+                <h3 className="text-2xl font-black bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">טבלת האליפות</h3>
+                <p className="text-xs font-bold text-slate-500 mt-1">הטבלה מתעדכנת אוטומטית עם סיום המשחקים</p>
+              </div>
+              <Link href="/rules" className="sm:hidden">
+                <Button variant="outline" size="sm" className="text-slate-300 bg-[#111827] border-slate-700">חוקים</Button>
+              </Link>
             </div>
             
             <div className="space-y-3">

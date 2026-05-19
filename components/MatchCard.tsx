@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/firebase";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 
 interface MatchCardProps {
   userId: string;
@@ -15,15 +15,16 @@ interface MatchCardProps {
   awayTeam: string;
   awayLogo: string;
   startTime: string;
+  matchDate: string; // חדש: תאריך המשחק נקי (לצורך הגבלת ג'וקר)
   propQuestion: string;
   isLocked?: boolean;
 }
 
-export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo, startTime, propQuestion, isLocked = false }: MatchCardProps) {
+export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo, startTime, matchDate, propQuestion, isLocked = false }: MatchCardProps) {
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
   const [propAnswer, setPropAnswer] = useState<boolean | null>(null);
-  const [isJoker, setIsJoker] = useState(false); // סטייט לג'וקר
+  const [isJoker, setIsJoker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasExistingPrediction, setHasExistingPrediction] = useState(false);
   const [pointsEarned, setPointsEarned] = useState<number | null>(null);
@@ -42,7 +43,7 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           setHomeScore(data.predictedHomeScore.toString());
           setAwayScore(data.predictedAwayScore.toString());
           setPropAnswer(data.propBetGuess);
-          setIsJoker(data.isJoker || false); // טעינת הג'וקר
+          setIsJoker(data.isJoker || false);
           setHasExistingPrediction(true);
           
           if (data.pointsEarned !== undefined) {
@@ -56,6 +57,46 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
 
     fetchExistingPrediction();
   }, [userId, matchId]);
+
+  // פונקציה חדשה שמוודאת שלא משתמשים ביותר מג'וקר אחד ביום
+  const handleJokerToggle = async () => {
+    if (isLocked) return;
+    
+    // אם הג'וקר דלוק ואנחנו רוצים לכבות - זה תמיד מותר
+    if (isJoker) {
+      setIsJoker(false);
+      return;
+    }
+
+    // אם אנחנו מנסים להדליק, צריך לוודא שאין משחק אחר היום עם ג'וקר
+    try {
+      const predictionsRef = collection(db, "Predictions");
+      // סורקים את כל הניחושים של המשתמש הזה
+      const q = query(predictionsRef, where("userId", "==", userId));
+      const snapshot = await getDocs(q);
+      
+      let jokerAlreadyUsedToday = false;
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        // אם הניחוש סומן כג'וקר, והוא באותו תאריך כמו המשחק הנוכחי, אבל מזהה המשחק שונה
+        if (data.isJoker === true && data.matchDate === matchDate && data.matchId !== matchId) {
+          jokerAlreadyUsedToday = true;
+        }
+      });
+
+      if (jokerAlreadyUsedToday) {
+        alert("❌ אופס! ניתן להפעיל קלף ג'וקר אחד בלבד בכל יום משחקים. כבר השתמשת בג'וקר על משחק אחר שמתקיים בתאריך הזה.");
+        return;
+      }
+
+      // אם הכל תקין, מדליקים את הג'וקר
+      setIsJoker(true);
+    } catch (error) {
+      console.error("Error checking joker availability:", error);
+      alert("שגיאה בבדיקת הג'וקר, נסה שוב.");
+    }
+  };
 
   const handleSavePrediction = async () => {
     if (isLocked) return; 
@@ -78,10 +119,11 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
       await setDoc(predictionRef, {
         userId,
         matchId,
+        matchDate, // שמירת התאריך במסד הנתונים כדי שנוכל לבדוק אותו בהמשך
         predictedHomeScore: Number(homeScore),
         predictedAwayScore: Number(awayScore),
         propBetGuess: propAnswer,
-        isJoker: isJoker, // שמירת הג'וקר
+        isJoker: isJoker,
         updatedAt: serverTimestamp(),
       });
 
@@ -120,7 +162,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
 
       <CardContent className="pt-8 p-6 space-y-7">
         
-        {/* קבוצות וניקוד */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex flex-col items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-white/95 border-2 border-slate-700/50 p-2 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.05)] relative overflow-hidden group">
@@ -135,18 +176,14 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           
           <div className="flex items-center gap-2 pb-5">
             <Input 
-              type="number" 
-              min="0"
-              disabled={isLocked}
+              type="number" min="0" disabled={isLocked}
               className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
               value={homeScore}
               onChange={(e) => setHomeScore(e.target.value)}
             />
             <div className="text-slate-500 font-black text-xl mb-1">:</div>
             <Input 
-              type="number" 
-              min="0"
-              disabled={isLocked}
+              type="number" min="0" disabled={isLocked}
               className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
               value={awayScore}
               onChange={(e) => setAwayScore(e.target.value)}
@@ -165,7 +202,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           </div>
         </div>
 
-        {/* שאלת בונוס + כפתור ג'וקר */}
         <div className="grid grid-cols-1 gap-4">
           <div className="bg-black/30 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-inner relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50"></div>
@@ -183,18 +219,18 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
             </div>
           </div>
 
+          {/* הפעלת הג'וקר עם הפונקציה שבודקת כפילויות */}
           {!isLocked && (
             <Button 
               variant="outline"
               className={`w-full rounded-2xl h-12 font-black border-2 transition-all duration-300 ${isJoker ? "bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]" : "bg-[#070A12] text-slate-400 border-slate-800 hover:bg-amber-900/20 hover:border-amber-700/50 hover:text-amber-500"}`}
-              onClick={() => setIsJoker(!isJoker)}
+              onClick={handleJokerToggle} 
             >
               🃏 {isJoker ? "הג'וקר הופעל! (כפול נקודות)" : "הפעל ג'וקר למשחק זה"}
             </Button>
           )}
         </div>
 
-        {/* כפתור שמירה */}
         {!isLocked && (
           <Button 
             className="w-full rounded-2xl h-14 text-lg font-black bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 text-white shadow-[0_5px_20px_rgba(37,99,235,0.2)] active:scale-[0.98] transition-all duration-300" 
@@ -205,7 +241,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           </Button>
         )}
 
-        {/* תצוגת נקודות חוויתית למשחק נעול */}
         {isLocked && hasExistingPrediction && (
           <div className="pt-2">
             {pointsEarned === null ? (
