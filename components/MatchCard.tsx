@@ -11,13 +11,15 @@ interface MatchCardProps {
   userId: string;
   matchId: string;
   homeTeam: string;
+  homeLogo: string; // חדש
   awayTeam: string;
+  awayLogo: string; // חדש
   startTime: string;
   propQuestion: string;
   isLocked?: boolean;
 }
 
-export function MatchCard({ userId, matchId, homeTeam, awayTeam, startTime, propQuestion, isLocked = false }: MatchCardProps) {
+export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo, startTime, propQuestion, isLocked = false }: MatchCardProps) {
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
   const [propAnswer, setPropAnswer] = useState<boolean | null>(null);
@@ -91,71 +93,91 @@ export function MatchCard({ userId, matchId, homeTeam, awayTeam, startTime, prop
   };
 
   return (
-    <Card className={`relative w-full max-w-md mx-auto rounded-3xl border shadow-xl overflow-hidden transition-all duration-300 ${
+    <Card className={`relative w-full max-w-md mx-auto rounded-[2rem] border shadow-2xl overflow-hidden transition-all duration-500 ${
       isLocked 
-        ? "bg-[#151D30]/20 border-slate-800/80 opacity-75" 
-        : "bg-gradient-to-b from-[#151D30]/80 to-[#111827]/90 border-slate-800/60 hover:border-slate-700/80 shadow-slate-950/40"
+        ? "bg-[#151D30]/40 border-slate-800/80 opacity-80 saturate-[0.8]" 
+        : "bg-gradient-to-b from-[#1A233A] to-[#0F1626] border-slate-700/60 hover:border-blue-500/30 hover:shadow-blue-900/10"
     }`}>
       
-      {/* תווית סטטוס עליונה */}
-      <CardHeader className="p-4 border-b border-slate-800/50 bg-slate-900/30 flex flex-row justify-between items-center">
-        <span className="text-xs font-black text-slate-400 tracking-wider uppercase">{startTime}</span>
+      {/* תווית זמן עליונה */}
+      <CardHeader className="p-3 border-b border-slate-800/50 bg-black/20 flex flex-row justify-center items-center relative">
+        <span className="text-xs font-extrabold text-slate-400 tracking-widest uppercase">{startTime}</span>
         {isLocked && (
-          <span className="text-[10px] font-black text-red-400 px-2.5 py-0.5 bg-red-500/10 border border-red-500/20 rounded-md tracking-wider uppercase">
-            🔒 ננעל
+          <span className="absolute right-4 text-[10px] font-black text-red-400 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-md tracking-wider uppercase animate-pulse">
+            ננעל
           </span>
         )}
       </CardHeader>
 
-      <CardContent className="pt-6 p-5 space-y-6">
+      <CardContent className="pt-8 p-6 space-y-8">
         
-        {/* אזור הזנת התוצאות בעיצוב משחקי */}
-        <div className="flex justify-between items-center gap-4 px-2">
+        {/* אזור הקבוצות והניקוד */}
+        <div className="flex justify-between items-center gap-2">
+          
           {/* קבוצת בית */}
-          <div className="flex-1 text-center font-black text-md text-slate-100 truncate">{homeTeam}</div>
+          <div className="flex flex-col items-center flex-1 space-y-3">
+            <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 p-3 flex items-center justify-center shadow-inner relative overflow-hidden group">
+              {homeLogo ? (
+                <img src={homeLogo} alt={homeTeam} className="w-full h-full object-contain drop-shadow-xl transition-transform duration-300 group-hover:scale-110" />
+              ) : (
+                <span className="text-2xl">🛡️</span>
+              )}
+            </div>
+            <div className="text-center font-black text-sm text-slate-200 tracking-wide truncate w-full px-1">{homeTeam}</div>
+          </div>
           
           {/* קוביות קלט */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Input 
               type="number" 
               min="0"
               disabled={isLocked}
-              className="w-14 h-14 text-center text-xl font-black rounded-xl bg-[#0B0F19] border-slate-800 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 disabled:opacity-100 disabled:bg-[#182235] disabled:border-slate-800 shadow-inner transition-all"
+              className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] text-slate-400" : ""}`}
               value={homeScore}
               onChange={(e) => setHomeScore(e.target.value)}
             />
-            <div className="text-slate-600 font-bold text-lg">:</div>
+            <div className="text-slate-600 font-black text-xl mb-1">:</div>
             <Input 
               type="number" 
               min="0"
               disabled={isLocked}
-              className="w-14 h-14 text-center text-xl font-black rounded-xl bg-[#0B0F19] border-slate-800 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 disabled:opacity-100 disabled:bg-[#182235] disabled:border-slate-800 shadow-inner transition-all"
+              className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] text-slate-400" : ""}`}
               value={awayScore}
               onChange={(e) => setAwayScore(e.target.value)}
             />
           </div>
 
           {/* קבוצת חוץ */}
-          <div className="flex-1 text-center font-black text-md text-slate-100 truncate">{awayTeam}</div>
+          <div className="flex flex-col items-center flex-1 space-y-3">
+            <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 p-3 flex items-center justify-center shadow-inner relative overflow-hidden group">
+              {awayLogo ? (
+                <img src={awayLogo} alt={awayTeam} className="w-full h-full object-contain drop-shadow-xl transition-transform duration-300 group-hover:scale-110" />
+              ) : (
+                <span className="text-2xl">🛡️</span>
+              )}
+            </div>
+            <div className="text-center font-black text-sm text-slate-200 tracking-wide truncate w-full px-1">{awayTeam}</div>
+          </div>
         </div>
 
-        {/* שאלת בונוס מודרנית */}
-        <div className="bg-[#0B0F19]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3 shadow-inner">
-          <div className="text-xs font-black text-blue-400 text-center tracking-wider uppercase">
-            🌟 שאלת בונוס
+        {/* שאלת בונוס */}
+        <div className="bg-black/20 border border-slate-700/30 p-4 rounded-2xl space-y-3 shadow-inner relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50"></div>
+          <div className="text-[10px] font-black text-blue-400 text-center tracking-widest uppercase">
+            שאלת בונוס
           </div>
-          <div className="text-sm font-bold text-slate-300 text-center pb-1">
+          <div className="text-sm font-bold text-slate-300 text-center pb-2 px-2 leading-relaxed">
             {propQuestion}
           </div>
-          <div className="flex justify-center gap-2">
+          <div className="flex justify-center gap-3">
             <Button 
               variant={propAnswer === true ? "default" : "outline"} 
               disabled={isLocked}
-              className={`flex-1 rounded-xl font-black h-10 tracking-wide border transition-all ${
+              className={`flex-1 rounded-xl font-black h-11 tracking-wide border-2 transition-all ${
                 propAnswer === true 
-                  ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-600/10" 
-                  : "bg-transparent text-slate-400 border-slate-800 hover:bg-slate-800/50"
-              } ${isLocked && propAnswer === true ? "opacity-100 bg-blue-600/40 border-blue-500/30 text-white" : ""}`}
+                  ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.3)]" 
+                  : "bg-[#070A12] text-slate-400 border-slate-800 hover:bg-slate-800/80 hover:border-slate-600"
+              } ${isLocked && propAnswer === true ? "opacity-100 bg-blue-600/50 border-blue-500/30 text-white shadow-none" : ""}`}
               onClick={() => setPropAnswer(true)}
             >
               כן
@@ -163,11 +185,11 @@ export function MatchCard({ userId, matchId, homeTeam, awayTeam, startTime, prop
             <Button 
               variant={propAnswer === false ? "default" : "outline"} 
               disabled={isLocked}
-              className={`flex-1 rounded-xl font-black h-10 tracking-wide border transition-all ${
+              className={`flex-1 rounded-xl font-black h-11 tracking-wide border-2 transition-all ${
                 propAnswer === false 
-                  ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-600/10" 
-                  : "bg-transparent text-slate-400 border-slate-800 hover:bg-slate-800/50"
-              } ${isLocked && propAnswer === false ? "opacity-100 bg-blue-600/40 border-blue-500/30 text-white" : ""}`}
+                  ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.3)]" 
+                  : "bg-[#070A12] text-slate-400 border-slate-800 hover:bg-slate-800/80 hover:border-slate-600"
+              } ${isLocked && propAnswer === false ? "opacity-100 bg-blue-600/50 border-blue-500/30 text-white shadow-none" : ""}`}
               onClick={() => setPropAnswer(false)}
             >
               לא
@@ -175,27 +197,27 @@ export function MatchCard({ userId, matchId, homeTeam, awayTeam, startTime, prop
           </div>
         </div>
 
-        {/* כפתור פעולה ראשי */}
+        {/* כפתור שמירה */}
         {!isLocked && (
           <Button 
-            className="w-full rounded-xl h-12 text-md font-black bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-600/10 hover:shadow-blue-500/20 active:scale-[0.98] transition-all" 
+            className="w-full rounded-2xl h-14 text-lg font-black bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 bg-size-200 hover:bg-right text-white shadow-[0_5px_20px_rgba(37,99,235,0.2)] active:scale-[0.98] transition-all duration-300" 
             onClick={handleSavePrediction}
             disabled={isSaving}
           >
-            {isSaving ? "שומר..." : hasExistingPrediction ? "עדכן ניחוש משחק" : "שמור ניחוש משחק"}
+            {isSaving ? "שומר נתונים..." : hasExistingPrediction ? "עדכן החלטה" : "נעל ניחוש"}
           </Button>
         )}
 
-        {/* באנר תוצאות ונקודות משחק נעול */}
+        {/* באנר תוצאות נעולות */}
         {isLocked && hasExistingPrediction && (
-          <div className={`mt-2 p-3.5 rounded-xl text-center font-black text-sm border shadow-inner tracking-wide ${
-            pointsEarned === null ? "bg-amber-500/5 text-amber-400 border-amber-500/20" :
-            pointsEarned > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" :
-            "bg-slate-800/30 text-slate-500 border-slate-800"
+          <div className={`mt-2 p-4 rounded-2xl text-center font-black text-sm border-2 shadow-inner tracking-wide ${
+            pointsEarned === null ? "bg-[#070A12] text-slate-400 border-slate-800" :
+            pointsEarned > 0 ? "bg-green-500/10 text-green-400 border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.1)]" :
+            "bg-red-500/5 text-red-400/80 border-red-500/10"
           }`}>
-            {pointsEarned === null ? "⏳ הנתונים בעיבוד, ממתין לשריקה..." : 
-             pointsEarned > 0 ? `🏆 זכית ב-${pointsEarned} נקודות במשחק זה!` : 
-             "0 נקודות הפעם 😕"}
+            {pointsEarned === null ? "⏳ מחשב תוצאות..." : 
+             pointsEarned > 0 ? `🏆 הוספת ${pointsEarned} נקודות למאזן!` : 
+             "הניחוש לא צלח הפעם 😕"}
           </div>
         )}
 
