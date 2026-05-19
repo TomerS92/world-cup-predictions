@@ -13,9 +13,9 @@ import { MatchCard } from "@/components/MatchCard";
 interface RealMatch {
   id: string;
   homeTeam: string;
-  homeLogo: string; // שדה חדש לסמל
+  homeLogo: string;
   awayTeam: string;
-  awayLogo: string; // שדה חדש לסמל
+  awayLogo: string;
   startTime: string;
   propQuestion: string;
   isLocked: boolean;
@@ -71,8 +71,6 @@ export default function Dashboard() {
         if (data && data.events) {
           const upcoming = data.events.map((event: any) => {
             const competition = event.competitions[0];
-            
-            // שולפים את האובייקטים המלאים של הקבוצות כדי להוציא גם שם וגם סמל
             const homeCompetitor = competition.competitors.find((c: any) => c.homeAway === 'home');
             const awayCompetitor = competition.competitors.find((c: any) => c.homeAway === 'away');
 
@@ -90,9 +88,9 @@ export default function Dashboard() {
             return {
               id: event.id,
               homeTeam: homeCompetitor.team.displayName,
-              homeLogo: homeCompetitor.team.logo || "", // שליפת הסמל
+              homeLogo: homeCompetitor.team.logo || "",
               awayTeam: awayCompetitor.team.displayName,
-              awayLogo: awayCompetitor.team.logo || "", // שליפת הסמל
+              awayLogo: awayCompetitor.team.logo || "",
               startTime: formattedDate,
               propQuestion: "האם יובקעו מעל 2.5 שערים במשחק?",
               isLocked: isLocked
@@ -125,7 +123,7 @@ export default function Dashboard() {
 
       <div className="relative max-w-5xl mx-auto p-4 md:p-8 space-y-8">
         
-        <header className="flex items-center justify-between bg-[#151D30]/80 backdrop-blur-xl p-4 md:p-5 rounded-3xl border border-slate-700/50 shadow-2xl">
+        <header className="flex items-center justify-between bg-[#151D30]/80 backdrop-blur-xl p-4 md:p-5 rounded-3xl border border-slate-700/40 shadow-2xl">
           <div className="flex items-center gap-4">
             <div className="relative">
               <Avatar className="h-14 w-14 border-2 border-blue-500/50 shadow-lg shadow-blue-500/20">
@@ -144,7 +142,7 @@ export default function Dashboard() {
           </div>
           <Button 
             variant="ghost" 
-            className="text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-xl border border-slate-700/50 font-bold transition-all"
+            className="text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl border border-slate-700/40 font-bold transition-all"
             onClick={() => signOut(auth)}
           >
             התנתק
@@ -152,11 +150,12 @@ export default function Dashboard() {
         </header>
 
         <Tabs defaultValue="matches" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-[#111827]/80 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-inner">
-            <TabsTrigger value="matches" className="rounded-xl font-black text-md tracking-wide data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 transition-all duration-300">
+          {/* תיקון הטאבים הלא פעילים: text-slate-400 עם שינוי צבע בהובר */}
+          <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-[#111827]/90 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-inner">
+            <TabsTrigger value="matches" className="rounded-xl font-black text-md tracking-wide text-slate-400 hover:text-slate-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 transition-all duration-300">
               ⚽ זירת הניחושים
             </TabsTrigger>
-            <TabsTrigger value="leaderboard" className="rounded-xl font-black text-md tracking-wide data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 transition-all duration-300">
+            <TabsTrigger value="leaderboard" className="rounded-xl font-black text-md tracking-wide text-slate-400 hover:text-slate-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 transition-all duration-300">
               📊 דירוג החברה
             </TabsTrigger>
           </TabsList>
@@ -199,7 +198,7 @@ export default function Dashboard() {
             </div>
           </TabsContent>
           
-          <TabsContent value="leaderboard" className="bg-[#151D30]/40 border border-slate-700/50 p-6 rounded-3xl shadow-2xl backdrop-blur-md focus-visible:outline-hidden">
+          <TabsContent value="leaderboard" className="bg-[#151D30]/40 border border-slate-700/40 p-6 rounded-3xl shadow-2xl backdrop-blur-md focus-visible:outline-hidden">
             <div className="mb-8">
               <h3 className="text-2xl font-black bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">טבלת האליפות</h3>
               <p className="text-xs font-bold text-slate-500 mt-1">הטבלה מתעדכנת אוטומטית עם סיום המשחקים</p>
