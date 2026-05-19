@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, updateDoc, increment } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, increment, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,7 +33,6 @@ export default function AdminPage() {
       for (const predictionDoc of querySnapshot.docs()) {
         const data = predictionDoc.data();
         
-        // הגנה מפני עדכון כפול של אותו ניחוש
         if (data.pointsEarned !== undefined) {
           continue;
         }
@@ -52,7 +51,6 @@ export default function AdminPage() {
           (guessedHome === guessedAway && realHome === realAway)
         );
 
-        // 1. חישוב נקודות בסיס
         if (isBullseye) {
           basePoints = 5;
         } else {
@@ -61,49 +59,50 @@ export default function AdminPage() {
           } else if (isDirectionMatch) {
             basePoints = 1;
           }
-
-          // 2. חישוב בונוסים מבוססי תוצאה (רק אם אין פגיעה בול)
-          // בונוס פגיעה בתוצאה של קבוצה אחת בדיוק
           if (guessedHome === realHome || guessedAway === realAway) {
             extraPoints += 1;
           }
-          // בונוס סך שערים מדויק במשחק
           if (guessedHome + guessedAway === realHome + realAway) {
             extraPoints += 1;
           }
         }
 
-        // 3. חישוב שאלת הבונוס הרשמית
         let propPoints = 0;
         if (data.propBetGuess === propAnswer) {
           propPoints = 2;
         }
 
-        // סך הכל לפני ג'וקר
         let totalEarned = basePoints + extraPoints + propPoints;
-
-        // 4. הפעלת מכפיל ג'וקר (אם המשתמש סימן)
         if (data.isJoker) {
           totalEarned *= 2;
         }
 
-        // עדכון הניחוש במסד הנתונים
         await updateDoc(predictionDoc.ref, {
           pointsEarned: totalEarned
         });
 
-        // עדכון סך הנקודות של המשתמש בפרופיל (רק אם זכה במשהו)
-        if (totalEarned > 0) {
-          const userRef = doc(db, "Users", data.userId);
-          await updateDoc(userRef, {
-            totalPoints: increment(totalEarned)
-          });
+        // עדכון ניקוד ורצף (Streak) של המשתמש
+        const userRef = doc(db, "Users", data.userId);
+        const userSnap = await getDoc(userRef);
+        
+        let currentStreak = userSnap.exists() ? (userSnap.data().currentStreak || 0) : 0;
+        
+        // רק אם צדק בכיוון המשחק (נקודות בסיס), הרצף ממשיך
+        if (basePoints > 0) {
+          currentStreak += 1;
+        } else {
+          currentStreak = 0;
         }
+
+        await updateDoc(userRef, {
+          totalPoints: increment(totalEarned),
+          currentStreak: currentStreak
+        });
 
         processedCount++;
       }
 
-      alert(`העיבוד הידני הושלם בהצלחה! חושבו הבונוסים, הופעלו הג'וקרים, ועודכנו ${processedCount} ניחושים.`);
+      alert(`העיבוד הידני הושלם בהצלחה! חושבו הבונוסים, הופעלו הג'וקרים, עודכנו הרצפים, וטופלו ${processedCount} ניחושים.`);
     } catch (error: any) {
       console.error("שגיאה בעיבוד תוצאות:", error);
       alert("תקלה: " + error.message);
@@ -115,7 +114,6 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-8 flex flex-col items-center justify-center gap-8" dir="rtl">
       
-      {/* כרטיסיית הזנה ידנית (הדרך המומלצת למערכת משולבת בונוסים) */}
       <Card className="w-full max-w-lg shadow-2xl border-0 bg-slate-800 text-white border-t-4 border-t-purple-500">
         <CardHeader className="border-b border-slate-700 pb-6">
           <CardTitle className="text-2xl font-black text-center text-slate-100">
@@ -164,17 +162,11 @@ export default function AdminPage() {
               <Button 
                 variant={propAnswer === true ? "default" : "outline"} 
                 className={`flex-1 rounded-xl h-12 font-black border-2 ${propAnswer === true ? "bg-purple-600 hover:bg-purple-500 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-transparent text-slate-400 border-slate-700 hover:bg-slate-800"}`}
-                onClick={() => setPropAnswer(true)}
-              >
-                כן
-              </Button>
+                onClick={() => setPropAnswer(true)}>כן</Button>
               <Button 
                 variant={propAnswer === false ? "default" : "outline"} 
                 className={`flex-1 rounded-xl h-12 font-black border-2 ${propAnswer === false ? "bg-purple-600 hover:bg-purple-500 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-transparent text-slate-400 border-slate-700 hover:bg-slate-800"}`}
-                onClick={() => setPropAnswer(false)}
-              >
-                לא
-              </Button>
+                onClick={() => setPropAnswer(false)}>לא</Button>
             </div>
           </div>
 

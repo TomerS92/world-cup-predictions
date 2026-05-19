@@ -18,7 +18,7 @@ interface RealMatch {
   awayTeam: string;
   awayLogo: string;
   startTime: string;
-  matchDate: string; // תאריך המשחק (לסינון ולהגבלת ג'וקר)
+  matchDate: string; 
   propQuestion: string;
   isLocked: boolean;
 }
@@ -39,7 +39,7 @@ export default function Dashboard() {
   const [realMatches, setRealMatches] = useState<RealMatch[]>([]);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(true);
-  const [activeFilter, setActiveFilter] = useState("all"); // סטייט לפילטרים
+  const [activeFilter, setActiveFilter] = useState("all"); 
   const router = useRouter();
 
   useEffect(() => {
@@ -92,7 +92,6 @@ export default function Dashboard() {
               weekday: 'short', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
             
-            // יצירת מחרוזת תאריך נקי (YYYY-MM-DD) לשימוש בסינון ובהגבלת הג'וקר
             const matchDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
             const isLocked = dateObj < new Date();
             
@@ -106,7 +105,7 @@ export default function Dashboard() {
               awayTeam: awayCompetitor.team.displayName,
               awayLogo: awayCompetitor.team.logo || "",
               startTime: formattedDate,
-              matchDate: matchDateStr, // שמירת התאריך הנקי
+              matchDate: matchDateStr, 
               propQuestion: PROP_QUESTIONS[questionIndex],
               isLocked: isLocked
             };
@@ -124,7 +123,6 @@ export default function Dashboard() {
     fetchESPNMatches();
   }, []);
 
-  // לוגיקת הסינון
   const filteredMatches = realMatches.filter(match => {
     if (activeFilter === "all") return true;
     if (activeFilter === "open") return !match.isLocked;
@@ -197,7 +195,6 @@ export default function Dashboard() {
           
           <TabsContent value="matches" className="space-y-6 focus-visible:outline-hidden">
             
-            {/* שורת הפילטרים החדשה */}
             <div className="flex flex-col gap-4 px-2">
               <div className="flex justify-between items-center">
                 <div>
@@ -243,7 +240,6 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {/* מרנדרים עכשיו את הרשימה המסוננת (filteredMatches) */}
               {filteredMatches.map((match) => (
                 <MatchCard 
                   key={match.id}
@@ -254,7 +250,7 @@ export default function Dashboard() {
                   awayTeam={match.awayTeam}
                   awayLogo={match.awayLogo}
                   startTime={match.startTime}
-                  matchDate={match.matchDate} // העברת התאריך לכרטיסייה
+                  matchDate={match.matchDate}
                   propQuestion={match.propQuestion}
                   isLocked={match.isLocked}
                 />
@@ -299,14 +295,24 @@ export default function Dashboard() {
                         <AvatarFallback className="bg-slate-800 text-white font-bold">{player.displayName?.charAt(0)}</AvatarFallback>
                       </Avatar>
                       
-                      <span className={`font-black text-lg ${isCurrentUser ? "text-blue-300" : "text-slate-200"}`}>
-                        {player.displayName} 
-                        {isCurrentUser && (
-                          <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-black mr-2 tracking-wide uppercase align-middle">
-                            אתה
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-black text-lg ${isCurrentUser ? "text-blue-300" : "text-slate-200"}`}>
+                            {player.displayName}
+                          </span>
+                          {isCurrentUser && (
+                            <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-black tracking-wide uppercase align-middle">
+                              אתה
+                            </span>
+                          )}
+                        </div>
+                        {/* תצוגת רצף הניצחונות */}
+                        {player.currentStreak >= 3 && (
+                          <span className="text-[10px] text-orange-400 font-black tracking-wide mt-0.5 flex items-center gap-1">
+                            🔥 רצף {player.currentStreak}
                           </span>
                         )}
-                      </span>
+                      </div>
                     </div>
                     
                     <div className={`font-black tracking-wider text-base bg-[#0B0F19] px-4 py-2 rounded-xl border shadow-inner flex items-center gap-1 ${isCurrentUser ? "border-blue-500/40 text-blue-400" : "border-slate-800 text-slate-300"}`}>

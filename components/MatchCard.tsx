@@ -15,7 +15,7 @@ interface MatchCardProps {
   awayTeam: string;
   awayLogo: string;
   startTime: string;
-  matchDate: string; // חדש: תאריך המשחק נקי (לצורך הגבלת ג'וקר)
+  matchDate: string;
   propQuestion: string;
   isLocked?: boolean;
 }
@@ -58,28 +58,20 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
     fetchExistingPrediction();
   }, [userId, matchId]);
 
-  // פונקציה חדשה שמוודאת שלא משתמשים ביותר מג'וקר אחד ביום
   const handleJokerToggle = async () => {
     if (isLocked) return;
-    
-    // אם הג'וקר דלוק ואנחנו רוצים לכבות - זה תמיד מותר
     if (isJoker) {
       setIsJoker(false);
       return;
     }
-
-    // אם אנחנו מנסים להדליק, צריך לוודא שאין משחק אחר היום עם ג'וקר
     try {
       const predictionsRef = collection(db, "Predictions");
-      // סורקים את כל הניחושים של המשתמש הזה
       const q = query(predictionsRef, where("userId", "==", userId));
       const snapshot = await getDocs(q);
       
       let jokerAlreadyUsedToday = false;
-
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // אם הניחוש סומן כג'וקר, והוא באותו תאריך כמו המשחק הנוכחי, אבל מזהה המשחק שונה
         if (data.isJoker === true && data.matchDate === matchDate && data.matchId !== matchId) {
           jokerAlreadyUsedToday = true;
         }
@@ -89,8 +81,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
         alert("❌ אופס! ניתן להפעיל קלף ג'וקר אחד בלבד בכל יום משחקים. כבר השתמשת בג'וקר על משחק אחר שמתקיים בתאריך הזה.");
         return;
       }
-
-      // אם הכל תקין, מדליקים את הג'וקר
       setIsJoker(true);
     } catch (error) {
       console.error("Error checking joker availability:", error);
@@ -106,6 +96,20 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
       return;
     }
     
+    // --- Sanity Check (Linting) ---
+    const homeNum = Number(homeScore);
+    const awayNum = Number(awayScore);
+    const goalDiff = Math.abs(homeNum - awayNum);
+    const totalGoals = homeNum + awayNum;
+
+    if (goalDiff >= 4 || totalGoals >= 7) {
+      const isSane = window.confirm(
+        "⚠️ [LINT WARNING] UVM_FATAL: Unrealistic scenario detected!\n\nהסימולציה מזהה תוצאה קיצונית (הפרש של 4+ שערים או 7+ שערים בסך הכל).\nהאם אתה בטוח שאתה רוצה לדחוף (Commit) את הרגרסיה הזאת למערכת?"
+      );
+      if (!isSane) return;
+    }
+    // ------------------------------
+
     if (!userId) {
       alert("שגיאה: המערכת לא מזהה שאתה מחובר. נסה לרענן את העמוד.");
       return;
@@ -119,9 +123,9 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
       await setDoc(predictionRef, {
         userId,
         matchId,
-        matchDate, // שמירת התאריך במסד הנתונים כדי שנוכל לבדוק אותו בהמשך
-        predictedHomeScore: Number(homeScore),
-        predictedAwayScore: Number(awayScore),
+        matchDate,
+        predictedHomeScore: homeNum,
+        predictedAwayScore: awayNum,
         propBetGuess: propAnswer,
         isJoker: isJoker,
         updatedAt: serverTimestamp(),
@@ -219,7 +223,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
             </div>
           </div>
 
-          {/* הפעלת הג'וקר עם הפונקציה שבודקת כפילויות */}
           {!isLocked && (
             <Button 
               variant="outline"
