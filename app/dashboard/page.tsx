@@ -16,7 +16,7 @@ interface RealMatch {
   awayTeam: string;
   startTime: string;
   propQuestion: string;
-  isLocked: boolean; // הוספנו דגל נעילה
+  isLocked: boolean;
 }
 
 export default function Dashboard() {
@@ -63,6 +63,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchESPNMatches = async () => {
       try {
+        // עדכון טווח התאריכים להבאת כל המשחקים שנשארו לצורך טסטים
         const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260519-20260620");
         const data = await response.json();
 
@@ -74,14 +75,13 @@ export default function Dashboard() {
 
             const dateObj = new Date(event.date);
             const formattedDate = dateObj.toLocaleString('he-IL', {
-              weekday: 'long', 
-              month: 'short', 
+              weekday: 'short', 
+              month: 'numeric', 
               day: 'numeric', 
               hour: '2-digit', 
               minute: '2-digit'
             });
 
-            // בדיקת נעילת זמן האם שעת המשחק קטנה מהשעה כרגע?
             const isLocked = dateObj < new Date();
 
             return {
@@ -108,48 +108,76 @@ export default function Dashboard() {
 
   if (loadingUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="text-xl font-bold text-slate-500 animate-pulse">טוען נתונים...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0F19]">
+        <div className="text-xl font-black text-blue-500 animate-pulse tracking-widest">טוען זירת משחק...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8" dir="rtl">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#0B0F19] text-slate-100 font-sans selection:bg-blue-500/30" dir="rtl">
+      {/* רקע אמביינט זוהר בעדינות */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[400px] bg-gradient-to-b from-blue-600/10 via-purple-600/5 to-transparent blur-3xl pointer-events-none" />
+
+      <div className="relative max-w-5xl mx-auto p-4 md:p-8 space-y-8">
         
-        <header className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+        {/* הדר פרימיום כהה */}
+        <header className="flex items-center justify-between bg-[#151D30]/60 backdrop-blur-xl p-4 md:p-5 rounded-2xl border border-slate-800/80 shadow-2xl">
           <div className="flex items-center gap-4">
-            <Avatar className="h-12 w-12 border-2 border-slate-100">
-              <AvatarImage src={user?.photoURL} alt={user?.displayName} />
-              <AvatarFallback>{user?.displayName?.charAt(0)}</AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              <Avatar className="h-14 w-14 border-2 border-blue-500/50 shadow-lg shadow-blue-500/10">
+                <AvatarImage src={user?.photoURL} alt={user?.displayName} />
+                <AvatarFallback className="bg-slate-800 text-white font-bold">{user?.displayName?.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[#151D30] rounded-full" />
+            </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">{user?.displayName}</h2>
-              <p className="text-sm font-medium text-blue-600">{user?.totalPoints || 0} נקודות</p>
+              <h2 className="text-lg md:text-xl font-black bg-gradient-to-l from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">{user?.displayName}</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xl">🏆</span>
+                <p className="text-sm font-extrabold text-blue-400 tracking-wide">{user?.totalPoints || 0} נקודות במאזן</p>
+              </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => signOut(auth)}>
+          <Button 
+            variant="ghost" 
+            className="text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-xl border border-slate-800 font-bold transition-all"
+            onClick={() => signOut(auth)}
+          >
             התנתק
           </Button>
         </header>
 
+        {/* טאבים בסגנון אפליקציית ספורט מודרנית */}
         <Tabs defaultValue="matches" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6 h-12 bg-slate-200/50 rounded-xl p-1">
-            <TabsTrigger value="matches" className="rounded-lg font-bold text-base">הפרמייר ליג</TabsTrigger>
-            <TabsTrigger value="leaderboard" className="rounded-lg font-bold text-base">טבלת החברה</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-[#111827] border border-slate-800 rounded-2xl p-1.5 shadow-inner">
+            <TabsTrigger value="matches" className="rounded-xl font-black text-md tracking-wide data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300">
+              ⚽ משחקים וניחושים
+            </TabsTrigger>
+            <TabsTrigger value="leaderboard" className="rounded-xl font-black text-md tracking-wide data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300">
+              📊 טבלת הליגה של החברה
+            </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="matches" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[400px]">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black tracking-tight">המשחקים הקרובים</h3>
-              {loadingMatches && <span className="text-sm text-blue-500 font-bold animate-pulse">מושך נתונים מ-ESPN...</span>}
+          {/* תוכן משחקים */}
+          <TabsContent value="matches" className="space-y-6 focus-visible:outline-hidden">
+            <div className="flex justify-between items-center px-1">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">זירת הניחושים</h3>
+                <p className="text-xs font-bold text-slate-500 mt-0.5">לוח המשחקים הרשמי מהשרתים</p>
+              </div>
+              {loadingMatches && (
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                  <span className="text-xs text-blue-400 font-black tracking-wider">LIVE DATA</span>
+                </div>
+              )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {!loadingMatches && realMatches.length === 0 && (
-                <div className="col-span-full text-center text-slate-400 py-10">
-                  לא נמצאו משחקים קרובים בלוח הזמנים
+                <div className="col-span-full text-center text-slate-500 py-16 bg-[#151D30]/20 rounded-2xl border border-slate-800 border-dashed">
+                  לא נמצאו משחקים פעילים בטווח הזמן שנבחר
                 </div>
               )}
               
@@ -168,41 +196,57 @@ export default function Dashboard() {
             </div>
           </TabsContent>
           
-          <TabsContent value="leaderboard" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[400px]">
-            <h3 className="text-2xl font-black mb-6 tracking-tight">דירוג המובילים</h3>
+          {/* תוכן טבלת מובילים */}
+          <TabsContent value="leaderboard" className="bg-[#151D30]/20 border border-slate-800/60 p-5 md:p-6 rounded-2xl shadow-2xl backdrop-blur-md focus-visible:outline-hidden">
+            <div className="mb-6">
+              <h3 className="text-2xl font-black bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">דירוג האליפות</h3>
+              <p className="text-xs font-bold text-slate-500 mt-0.5">הטבלה מתעדכנת אוטומטית עם סיום המשחקים</p>
+            </div>
             
             <div className="space-y-3">
               {leaderboard.map((player, index) => {
                 const isCurrentUser = player.id === user?.id;
+                const isTop3 = index < 3;
+                
                 return (
                   <div 
                     key={player.id} 
-                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                    className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 group ${
                       isCurrentUser 
-                        ? "bg-blue-50/50 border-blue-200 shadow-sm" 
-                        : "bg-slate-50/50 border-slate-100 hover:bg-slate-50"
+                        ? "bg-gradient-to-r from-blue-600/20 via-blue-600/10 to-transparent border-blue-500/40 shadow-xl shadow-blue-900/10" 
+                        : "bg-[#151D30]/40 border-slate-800 hover:border-slate-700 hover:bg-[#151D30]/70"
                     }`}
                   >
                     <div className="flex items-center gap-4">
-                      <span className={`w-6 text-center font-black text-lg ${
-                        index === 0 ? "text-yellow-500 text-xl" : index === 1 ? "text-slate-400" : index === 2 ? "text-amber-600" : "text-slate-400"
-                      }`}>
-                        {index === 0 ? "👑" : index + 1}
-                      </span>
+                      {/* מיקום מעוצב בטבלה */}
+                      <div className="w-8 flex justify-center items-center">
+                        {index === 0 ? <span className="text-2xl animate-bounce duration-1000">🥇</span> : 
+                         index === 1 ? <span className="text-2xl">🥈</span> : 
+                         index === 2 ? <span className="text-2xl">🥉</span> : 
+                         <span className="font-black text-sm text-slate-500 tracking-wider">#{index + 1}</span>}
+                      </div>
                       
-                      <Avatar className="h-10 w-10 border border-slate-200">
+                      {/* תמונת פרופיל */}
+                      <Avatar className={`h-11 w-11 border transition-transform duration-300 group-hover:scale-105 ${isCurrentUser ? "border-blue-400" : "border-slate-700"}`}>
                         <AvatarImage src={player.photoURL} alt={player.displayName} />
-                        <AvatarFallback>{player.displayName?.charAt(0)}</AvatarFallback>
+                        <AvatarFallback className="bg-slate-800 text-white font-bold">{player.displayName?.charAt(0)}</AvatarFallback>
                       </Avatar>
                       
-                      <span className={`font-bold ${isCurrentUser ? "text-blue-900 font-extrabold" : "text-slate-800"}`}>
-                        {player.displayName} {isCurrentUser && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium mr-1">אתה</span>}
+                      {/* שם משתמש */}
+                      <span className={`font-black text-md ${isCurrentUser ? "text-blue-400" : "text-slate-200"}`}>
+                        {player.displayName} 
+                        {isCurrentUser && (
+                          <span className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-black mr-2 tracking-wide uppercase">
+                            אתה
+                          </span>
+                        )}
                       </span>
                     </div>
                     
-                    <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-lg border border-slate-100 shadow-2xs">
-                      {player.totalPoints || 0} נק׳
-                    </span>
+                    {/* תצוגת ניקוד מעוצבת קפסולה */}
+                    <div className={`font-black tracking-wider text-sm bg-[#111827] px-4 py-1.5 rounded-xl border shadow-inner ${isCurrentUser ? "border-blue-500/30 text-blue-400" : "border-slate-800 text-slate-300"}`}>
+                      {player.totalPoints || 0} <span className="text-[10px] font-bold text-slate-500 mr-0.5">נק׳</span>
+                    </div>
                   </div>
                 );
               })}
