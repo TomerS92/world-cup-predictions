@@ -63,7 +63,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchESPNMatches = async () => {
       try {
-        const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard");
+        const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260519-20260620");
         const data = await response.json();
 
         if (data && data.events) {
