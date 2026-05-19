@@ -5,6 +5,7 @@ import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, query, orderBy, DocumentData } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -140,17 +141,24 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            className="text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl border border-slate-700/40 font-bold transition-all"
-            onClick={() => signOut(auth)}
-          >
-            התנתק
-          </Button>
+          
+          <div className="flex items-center gap-2">
+            <Link href="/rules">
+              <Button variant="outline" className="text-slate-200 bg-[#111827] hover:bg-slate-800 hover:text-white rounded-xl border border-slate-700/50 font-bold transition-all shadow-sm">
+                חוקים וניקוד 📖
+              </Button>
+            </Link>
+            <Button 
+              variant="ghost" 
+              className="text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl border border-slate-700/40 font-bold transition-all"
+              onClick={() => signOut(auth)}
+            >
+              התנתק
+            </Button>
+          </div>
         </header>
 
         <Tabs defaultValue="matches" className="w-full">
-          {/* תיקון הטאבים הלא פעילים: text-slate-400 עם שינוי צבע בהובר */}
           <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-[#111827]/90 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-inner">
             <TabsTrigger value="matches" className="rounded-xl font-black text-md tracking-wide text-slate-400 hover:text-slate-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/20 transition-all duration-300">
               ⚽ זירת הניחושים
