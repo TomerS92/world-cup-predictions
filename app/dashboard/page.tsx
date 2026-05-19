@@ -22,6 +22,17 @@ interface RealMatch {
   isLocked: boolean;
 }
 
+// מאגר שאלות בונוס דינמיות
+const PROP_QUESTIONS = [
+  "האם יובקעו מעל 2.5 שערים במשחק?",
+  "האם שתי הקבוצות יבקיעו (BTTS)?",
+  "האם יישלף כרטיס אדום במשחק?",
+  "האם יובקע שער במחצית הראשונה?",
+  "האם תהיה שריקה לפנדל?",
+  "האם קבוצת החוץ תבקיע ראשונה?",
+  "האם המשחק יסתיים בהפרש של שער אחד בדיוק?"
+];
+
 export default function Dashboard() {
   const [user, setUser] = useState<DocumentData | null>(null);
   const [leaderboard, setLeaderboard] = useState<DocumentData[]>([]);
@@ -85,6 +96,10 @@ export default function Dashboard() {
             });
 
             const isLocked = dateObj < new Date();
+            
+            // בחירת שאלה דינמית מבוססת על ה-ID של המשחק (כדי שתהיה קבועה לכל משתמש לאותו משחק)
+            const numericId = parseInt(event.id.replace(/\D/g, '') || "0");
+            const questionIndex = numericId % PROP_QUESTIONS.length;
 
             return {
               id: event.id,
@@ -93,7 +108,7 @@ export default function Dashboard() {
               awayTeam: awayCompetitor.team.displayName,
               awayLogo: awayCompetitor.team.logo || "",
               startTime: formattedDate,
-              propQuestion: "האם יובקעו מעל 2.5 שערים במשחק?",
+              propQuestion: PROP_QUESTIONS[questionIndex],
               isLocked: isLocked
             };
           });
