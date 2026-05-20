@@ -47,7 +47,7 @@ export default function AdminPage() {
         const q = query(predictionsRef, where("matchId", "==", matchId));
         const querySnapshot = await getDocs(q);
 
-        for (const predictionDoc of querySnapshot.docs()) {
+        for (const predictionDoc of querySnapshot.docs) {
           const predData = predictionDoc.data();
           
           if (predData.pointsEarned !== undefined) {
