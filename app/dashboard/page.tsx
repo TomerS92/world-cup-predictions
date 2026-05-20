@@ -19,19 +19,8 @@ interface RealMatch {
   awayLogo: string;
   startTime: string;
   matchDate: string; 
-  propQuestion: string;
   isLocked: boolean;
 }
-
-const PROP_QUESTIONS = [
-  "האם יובקעו מעל 2.5 שערים במשחק?",
-  "האם שתי הקבוצות יבקיעו (BTTS)?",
-  "האם יישלף כרטיס אדום במשחק?",
-  "האם יובקע שער במחצית הראשונה?",
-  "האם תהיה שריקה לפנדל?",
-  "האם קבוצת החוץ תבקיע ראשונה?",
-  "האם המשחק יסתיים בהפרש של שער אחד בדיוק?"
-];
 
 export default function Dashboard() {
   const [user, setUser] = useState<DocumentData | null>(null);
@@ -94,9 +83,6 @@ export default function Dashboard() {
             
             const matchDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
             const isLocked = dateObj < new Date();
-            
-            const numericId = parseInt(event.id.replace(/\D/g, '') || "0");
-            const questionIndex = numericId % PROP_QUESTIONS.length;
 
             return {
               id: event.id,
@@ -106,7 +92,6 @@ export default function Dashboard() {
               awayLogo: awayCompetitor.team.logo || "",
               startTime: formattedDate,
               matchDate: matchDateStr, 
-              propQuestion: PROP_QUESTIONS[questionIndex],
               isLocked: isLocked
             };
           });
@@ -251,7 +236,6 @@ export default function Dashboard() {
                   awayLogo={match.awayLogo}
                   startTime={match.startTime}
                   matchDate={match.matchDate}
-                  propQuestion={match.propQuestion}
                   isLocked={match.isLocked}
                 />
               ))}
@@ -306,7 +290,6 @@ export default function Dashboard() {
                             </span>
                           )}
                         </div>
-                        {/* תצוגת רצף הניצחונות */}
                         {player.currentStreak >= 3 && (
                           <span className="text-[10px] text-orange-400 font-black tracking-wide mt-0.5 flex items-center gap-1">
                             🔥 רצף {player.currentStreak}

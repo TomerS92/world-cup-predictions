@@ -16,14 +16,12 @@ interface MatchCardProps {
   awayLogo: string;
   startTime: string;
   matchDate: string;
-  propQuestion: string;
   isLocked?: boolean;
 }
 
-export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo, startTime, matchDate, propQuestion, isLocked = false }: MatchCardProps) {
+export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo, startTime, matchDate, isLocked = false }: MatchCardProps) {
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
-  const [propAnswer, setPropAnswer] = useState<boolean | null>(null);
   const [isJoker, setIsJoker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasExistingPrediction, setHasExistingPrediction] = useState(false);
@@ -42,7 +40,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           const data = docSnap.data();
           setHomeScore(data.predictedHomeScore.toString());
           setAwayScore(data.predictedAwayScore.toString());
-          setPropAnswer(data.propBetGuess);
           setIsJoker(data.isJoker || false);
           setHasExistingPrediction(true);
           
@@ -91,12 +88,11 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
   const handleSavePrediction = async () => {
     if (isLocked) return; 
 
-    if (homeScore === "" || awayScore === "" || propAnswer === null) {
-      alert("שימו לב: חובה למלא את שתי התוצאות ולבחור תשובה לשאלת הבונוס כדי לשמור!");
+    if (homeScore === "" || awayScore === "") {
+      alert("שימו לב: חובה למלא את שתי התוצאות כדי לשמור!");
       return;
     }
     
-    // --- Sanity Check (Linting) ---
     const homeNum = Number(homeScore);
     const awayNum = Number(awayScore);
     const goalDiff = Math.abs(homeNum - awayNum);
@@ -108,7 +104,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
       );
       if (!isSane) return;
     }
-    // ------------------------------
 
     if (!userId) {
       alert("שגיאה: המערכת לא מזהה שאתה מחובר. נסה לרענן את העמוד.");
@@ -126,7 +121,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
         matchDate,
         predictedHomeScore: homeNum,
         predictedAwayScore: awayNum,
-        propBetGuess: propAnswer,
         isJoker: isJoker,
         updatedAt: serverTimestamp(),
       });
@@ -207,22 +201,6 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <div className="bg-black/30 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-inner relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50"></div>
-            <div className="text-[10px] font-black text-blue-400 text-center tracking-widest uppercase">שאלת בונוס</div>
-            <div className="text-sm font-bold text-slate-200 text-center pb-2 px-2 leading-relaxed">{propQuestion}</div>
-            <div className="flex justify-center gap-3">
-              <Button 
-                variant={propAnswer === true ? "default" : "outline"} disabled={isLocked}
-                className={`flex-1 rounded-xl font-black h-11 tracking-wide border-2 transition-all ${propAnswer === true ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.3)]" : "bg-[#070A12] text-slate-200 border-slate-800 hover:bg-slate-800 hover:text-white hover:border-slate-600"} ${isLocked && propAnswer === true ? "opacity-100 bg-blue-600/40 border-blue-500/30 text-white shadow-none" : ""}`}
-                onClick={() => setPropAnswer(true)}>כן</Button>
-              <Button 
-                variant={propAnswer === false ? "default" : "outline"} disabled={isLocked}
-                className={`flex-1 rounded-xl font-black h-11 tracking-wide border-2 transition-all ${propAnswer === false ? "bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.3)]" : "bg-[#070A12] text-slate-200 border-slate-800 hover:bg-slate-800 hover:text-white hover:border-slate-600"} ${isLocked && propAnswer === false ? "opacity-100 bg-blue-600/40 border-blue-500/30 text-white shadow-none" : ""}`}
-                onClick={() => setPropAnswer(false)}>לא</Button>
-            </div>
-          </div>
-
           {!isLocked && (
             <Button 
               variant="outline"

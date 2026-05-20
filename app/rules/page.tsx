@@ -109,26 +109,6 @@ export default function RulesPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <span className="text-2xl">🌟</span> שאלת הבונוס
-              </h3>
-              <div className="bg-[#0B0F19]/80 border border-purple-500/30 p-5 rounded-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-1.5 h-full bg-purple-500"></div>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-slate-400 text-sm leading-relaxed pr-2">
-                        לכל משחק מצורפת שאלת כן/לא מיוחדת. מענה נכון יעניק נקודות נוספות ללא קשר לתוצאה.
-                      </p>
-                    </div>
-                    <span className="bg-purple-500/10 text-purple-400 font-black px-3 py-1.5 rounded-xl border border-purple-500/20">
-                      2 נקודות
-                    </span>
-                  </div>
-                </div>
-            </div>
-
-            {/* כרטיס הג'וקר */}
             <div className="bg-gradient-to-r from-amber-500/20 to-orange-600/10 border border-amber-500/40 p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.1)]">
               <h3 className="text-xl font-black text-amber-400 flex items-center gap-2 mb-2">
                 <span className="text-2xl animate-pulse">🃏</span> קלף הג'וקר (מכפיל נקודות)
@@ -136,9 +116,9 @@ export default function RulesPage() {
               <p className="text-amber-100/80 text-sm font-medium leading-relaxed">
                 בטוחים בניחוש שלכם? סמנו את המשחק כ"ג'וקר" לפני שריקת הפתיחה. 
                 <br />
-                הג'וקר <span className="font-black text-amber-400 underline decoration-amber-500/50 underline-offset-4">מכפיל פי 2</span> את כל הנקודות שתצברו באותו משחק (כולל בונוס וניחומים). 
+                הג'וקר <span className="font-black text-amber-400 underline decoration-amber-500/50 underline-offset-4">מכפיל פי 2</span> את כל הנקודות שתצברו באותו משחק. 
                 <br />
-                <span className="text-amber-300 text-xs font-bold mt-2 inline-block">* מקסימום נקודות אפשרי ממשחק בודד (בול + שאלה + ג'וקר) = 14 נקודות!</span>
+                <span className="text-amber-300 text-xs font-bold mt-2 inline-block">* מקסימום נקודות אפשרי ממשחק בודד (פגיעה בול + ג'וקר) = 10 נקודות!</span>
               </p>
             </div>
 

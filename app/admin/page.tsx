@@ -4,179 +4,147 @@ import { useState } from "react";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, doc, updateDoc, increment, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default function AdminPage() {
-  const [matchId, setMatchId] = useState("");
-  const [homeScore, setHomeScore] = useState("");
-  const [awayScore, setAwayScore] = useState("");
-  const [propAnswer, setPropAnswer] = useState<boolean | null>(null);
-  const [isProcessingManual, setIsProcessingManual] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
 
-  const handleProcessManualResults = async () => {
-    if (homeScore === "" || awayScore === "" || propAnswer === null || matchId === "") {
-      alert("יש להזין מזהה משחק, תוצאה מלאה ושאלת בונוס.");
-      return;
-    }
+  const addLog = (msg: string) => {
+    setSyncLogs(prev => [msg, ...prev]);
+  };
 
-    setIsProcessingManual(true);
+  const handleAutoSyncAll = async () => {
+    setIsSyncing(true);
+    setSyncLogs([]);
+    addLog("מתחבר לשרתי ESPN למשיכת נתונים בזמן אמת...");
+
     try {
-      const predictionsRef = collection(db, "Predictions");
-      const q = query(predictionsRef, where("matchId", "==", matchId));
-      const querySnapshot = await getDocs(q);
+      const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260519-20260620");
+      const data = await response.json();
 
-      const realHome = Number(homeScore);
-      const realAway = Number(awayScore);
-      let processedCount = 0;
-
-      for (const predictionDoc of querySnapshot.docs()) {
-        const data = predictionDoc.data();
-        
-        if (data.pointsEarned !== undefined) {
-          continue;
-        }
-
-        let basePoints = 0;
-        let extraPoints = 0;
-        
-        const guessedHome = data.predictedHomeScore;
-        const guessedAway = data.predictedAwayScore;
-
-        const isBullseye = (guessedHome === realHome && guessedAway === realAway);
-        const isDiffMatch = (guessedHome - guessedAway === realHome - realAway);
-        const isDirectionMatch = (
-          (guessedHome > guessedAway && realHome > realAway) ||
-          (guessedHome < guessedAway && realHome < realAway) ||
-          (guessedHome === guessedAway && realHome === realAway)
-        );
-
-        if (isBullseye) {
-          basePoints = 5;
-        } else {
-          if (isDiffMatch) {
-            basePoints = 3;
-          } else if (isDirectionMatch) {
-            basePoints = 1;
-          }
-          if (guessedHome === realHome || guessedAway === realAway) {
-            extraPoints += 1;
-          }
-          if (guessedHome + guessedAway === realHome + realAway) {
-            extraPoints += 1;
-          }
-        }
-
-        let propPoints = 0;
-        if (data.propBetGuess === propAnswer) {
-          propPoints = 2;
-        }
-
-        let totalEarned = basePoints + extraPoints + propPoints;
-        if (data.isJoker) {
-          totalEarned *= 2;
-        }
-
-        await updateDoc(predictionDoc.ref, {
-          pointsEarned: totalEarned
-        });
-
-        // עדכון ניקוד ורצף (Streak) של המשתמש
-        const userRef = doc(db, "Users", data.userId);
-        const userSnap = await getDoc(userRef);
-        
-        let currentStreak = userSnap.exists() ? (userSnap.data().currentStreak || 0) : 0;
-        
-        // רק אם צדק בכיוון המשחק (נקודות בסיס), הרצף ממשיך
-        if (basePoints > 0) {
-          currentStreak += 1;
-        } else {
-          currentStreak = 0;
-        }
-
-        await updateDoc(userRef, {
-          totalPoints: increment(totalEarned),
-          currentStreak: currentStreak
-        });
-
-        processedCount++;
+      if (!data || !data.events) {
+        addLog("❌ לא נמצאו נתונים בשרת.");
+        setIsSyncing(false);
+        return;
       }
 
-      alert(`העיבוד הידני הושלם בהצלחה! חושבו הבונוסים, הופעלו הג'וקרים, עודכנו הרצפים, וטופלו ${processedCount} ניחושים.`);
+      const completedMatches = data.events.filter((event: any) => event.status.type.completed === true);
+      addLog(`נמצאו ${completedMatches.length} משחקים שהסתיימו. מתחיל חישוב...`);
+
+      let totalPredictionsProcessed = 0;
+
+      for (const match of completedMatches) {
+        const matchId = match.id;
+        const competition = match.competitions[0];
+        const homeTeam = competition.competitors.find((c: any) => c.homeAway === 'home');
+        const awayTeam = competition.competitors.find((c: any) => c.homeAway === 'away');
+        
+        const realHomeScore = parseInt(homeTeam.score);
+        const realAwayScore = parseInt(awayTeam.score);
+
+        const predictionsRef = collection(db, "Predictions");
+        const q = query(predictionsRef, where("matchId", "==", matchId));
+        const querySnapshot = await getDocs(q);
+
+        for (const predictionDoc of querySnapshot.docs()) {
+          const predData = predictionDoc.data();
+          
+          if (predData.pointsEarned !== undefined) {
+            continue; 
+          }
+
+          let basePoints = 0;
+          let extraPoints = 0;
+          
+          const guessedHome = predData.predictedHomeScore;
+          const guessedAway = predData.predictedAwayScore;
+
+          const isBullseye = (guessedHome === realHomeScore && guessedAway === realAwayScore);
+          const isDiffMatch = (guessedHome - guessedAway === realHomeScore - realAwayScore);
+          const isDirectionMatch = (
+            (guessedHome > guessedAway && realHomeScore > realAwayScore) ||
+            (guessedHome < guessedAway && realHomeScore < realAwayScore) ||
+            (guessedHome === guessedAway && realHomeScore === realAwayScore)
+          );
+
+          if (isBullseye) {
+            basePoints = 5;
+          } else {
+            if (isDiffMatch) basePoints = 3;
+            else if (isDirectionMatch) basePoints = 1;
+
+            if (guessedHome === realHomeScore || guessedAway === realAwayScore) extraPoints += 1;
+            if (guessedHome + guessedAway === realHomeScore + realAwayScore) extraPoints += 1;
+          }
+
+          let totalEarned = basePoints + extraPoints;
+          if (predData.isJoker) totalEarned *= 2;
+
+          await updateDoc(predictionDoc.ref, {
+            pointsEarned: totalEarned
+          });
+
+          const userRef = doc(db, "Users", predData.userId);
+          const userSnap = await getDoc(userRef);
+          
+          let currentStreak = userSnap.exists() ? (userSnap.data().currentStreak || 0) : 0;
+          if (basePoints > 0) currentStreak += 1;
+          else currentStreak = 0;
+
+          await updateDoc(userRef, {
+            totalPoints: increment(totalEarned),
+            currentStreak: currentStreak
+          });
+
+          totalPredictionsProcessed++;
+        }
+      }
+
+      addLog(`✅ סנכרון הושלם! ${totalPredictionsProcessed} ניחושים עודכנו בהצלחה.`);
+      
     } catch (error: any) {
-      console.error("שגיאה בעיבוד תוצאות:", error);
-      alert("תקלה: " + error.message);
+      console.error("Auto Sync Error:", error);
+      addLog(`❌ שגיאה: ${error.message}`);
     } finally {
-      setIsProcessingManual(false);
+      setIsSyncing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8 flex flex-col items-center justify-center gap-8" dir="rtl">
+    <div className="min-h-screen bg-slate-900 p-4 md:p-8 flex flex-col items-center justify-center gap-8" dir="rtl">
       
-      <Card className="w-full max-w-lg shadow-2xl border-0 bg-slate-800 text-white border-t-4 border-t-purple-500">
+      <Card className="w-full max-w-xl shadow-2xl border-0 bg-slate-800 text-white border-t-4 border-t-blue-500">
         <CardHeader className="border-b border-slate-700 pb-6">
-          <CardTitle className="text-2xl font-black text-center text-slate-100">
-            הזנת תוצאות וחישוב ניקוד 🧮
+          <CardTitle className="text-3xl font-black text-center text-blue-400">
+            מרכז הבקרה האוטומטי 🤖
           </CardTitle>
-          <CardDescription className="text-center text-slate-400 mt-2">
-            הזן את נתוני הסיום כדי שמנוע הלוגיקה יחשב בול פגיעה, הפרשים, בונוסי שערים וג'וקרים במקביל.
+          <CardDescription className="text-center text-slate-300 mt-3 text-base">
+            לחיצה אחת תמשוך את כל תוצאות הסיום משרתי הספורט, ותחשב ניקוד בסיס, הפרשים, בונוסי שערים וג'וקרים בצורה אוטומטית לחלוטין.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-8 space-y-6">
+        <CardContent className="pt-8 flex flex-col items-center gap-6">
           
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-300">מזהה משחק (Match ID)</label>
-            <Input 
-              className="bg-slate-900 border-slate-700 text-white placeholder-slate-600 h-12"
-              placeholder="העתק לכאן את מזהה המשחק..."
-              value={matchId}
-              onChange={(e) => setMatchId(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-300 text-center block">תוצאת הסיום האמיתית</label>
-            <div className="flex justify-center items-center gap-6">
-              <Input 
-                type="number" min="0" placeholder="בית"
-                className="w-24 h-20 text-center text-3xl font-black bg-slate-900 border-slate-700 text-white"
-                value={homeScore}
-                onChange={(e) => setHomeScore(e.target.value)}
-              />
-              <div className="text-slate-500 font-bold text-2xl">-</div>
-              <Input 
-                type="number" min="0" placeholder="חוץ"
-                className="w-24 h-20 text-center text-3xl font-black bg-slate-900 border-slate-700 text-white"
-                value={awayScore}
-                onChange={(e) => setAwayScore(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="bg-slate-900/50 p-5 rounded-2xl space-y-4 border border-slate-700">
-            <div className="text-sm font-black text-purple-400 text-center uppercase tracking-widest">
-              התשובה לשאלת הבונוס
-            </div>
-            <div className="flex justify-center gap-3">
-              <Button 
-                variant={propAnswer === true ? "default" : "outline"} 
-                className={`flex-1 rounded-xl h-12 font-black border-2 ${propAnswer === true ? "bg-purple-600 hover:bg-purple-500 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-transparent text-slate-400 border-slate-700 hover:bg-slate-800"}`}
-                onClick={() => setPropAnswer(true)}>כן</Button>
-              <Button 
-                variant={propAnswer === false ? "default" : "outline"} 
-                className={`flex-1 rounded-xl h-12 font-black border-2 ${propAnswer === false ? "bg-purple-600 hover:bg-purple-500 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-transparent text-slate-400 border-slate-700 hover:bg-slate-800"}`}
-                onClick={() => setPropAnswer(false)}>לא</Button>
-            </div>
-          </div>
-
           <Button 
-            className="w-full rounded-2xl h-14 text-lg font-black bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white mt-4 shadow-xl active:scale-[0.98] transition-all" 
-            onClick={handleProcessManualResults}
-            disabled={isProcessingManual}
+            className="w-full md:w-3/4 rounded-3xl h-20 text-xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_30px_rgba(37,99,235,0.3)] hover:shadow-[0_0_40px_rgba(37,99,235,0.5)] active:scale-95 transition-all" 
+            onClick={handleAutoSyncAll}
+            disabled={isSyncing}
           >
-            {isProcessingManual ? "מעבד ומחשב ניקוד..." : "שגר חישובים ועדכן טבלה"}
+            {isSyncing ? "סורק, מחשב ומעדכן נתונים..." : "הפעל סנכרון תוצאות אוטומטי"}
           </Button>
+
+          <div className="w-full bg-[#0B0F19] rounded-xl p-4 min-h-[150px] border border-slate-700 font-mono text-sm space-y-2 overflow-y-auto max-h-[300px]">
+            {syncLogs.length === 0 ? (
+              <div className="text-slate-600 text-center mt-10">ממתין לפקודת סנכרון...</div>
+            ) : (
+              syncLogs.map((log, i) => (
+                <div key={i} className={`${log.includes('✅') ? 'text-green-400' : log.includes('❌') ? 'text-red-400' : 'text-slate-300'}`}>
+                  {'>'} {log}
+                </div>
+              ))
+            )}
+          </div>
+
         </CardContent>
       </Card>
     </div>
