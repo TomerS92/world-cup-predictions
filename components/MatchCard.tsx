@@ -26,6 +26,9 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
   const [isSaving, setIsSaving] = useState(false);
   const [hasExistingPrediction, setHasExistingPrediction] = useState(false);
   const [pointsEarned, setPointsEarned] = useState<number | null>(null);
+  const [pointsBreakdown, setPointsBreakdown] = useState<string | null>(null); // שדה חדש לפירוט
+  const [realHomeScore, setRealHomeScore] = useState<number | null>(null); // שדה חדש לתוצאת אמת
+  const [realAwayScore, setRealAwayScore] = useState<number | null>(null); // שדה חדש לתוצאת אמת
 
   useEffect(() => {
     const fetchExistingPrediction = async () => {
@@ -45,6 +48,13 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           
           if (data.pointsEarned !== undefined) {
             setPointsEarned(data.pointsEarned);
+          }
+          if (data.pointsBreakdown !== undefined) {
+            setPointsBreakdown(data.pointsBreakdown);
+          }
+          if (data.realHomeScore !== undefined) {
+            setRealHomeScore(data.realHomeScore);
+            setRealAwayScore(data.realAwayScore);
           }
         }
       } catch (error) {
@@ -160,11 +170,19 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
 
       <CardContent className="pt-8 p-6 space-y-7">
         
+        {/* תצוגת תוצאת האמת מעל הניחוש אם המשחק הסתיים */}
+        {isLocked && realHomeScore !== null && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2.5 text-center flex flex-col items-center gap-0.5 shadow-inner">
+            <span className="text-[10px] font-black text-blue-400 tracking-wider uppercase">תוצאת סיום רשמית</span>
+            <span className="text-xl font-black text-white tracking-widest">{realHomeScore} : {realAwayScore}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex flex-col items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-white/95 border-2 border-slate-700/50 p-2 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.05)] relative overflow-hidden group">
               {homeLogo ? (
-                <img src={homeLogo} alt={homeTeam} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-110" />
+                <img src={homeLogo} alt={homeTeam} className="w-full h-full object-contain" />
               ) : (
                 <span className="text-2xl">🛡️</span>
               )}
@@ -172,26 +190,29 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
             <div className="text-center font-black text-sm text-slate-200 tracking-wide w-full leading-tight">{homeTeam}</div>
           </div>
           
-          <div className="flex items-center gap-2 pb-5">
-            <Input 
-              type="number" min="0" disabled={isLocked}
-              className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
-              value={homeScore}
-              onChange={(e) => setHomeScore(e.target.value)}
-            />
-            <div className="text-slate-500 font-black text-xl mb-1">:</div>
-            <Input 
-              type="number" min="0" disabled={isLocked}
-              className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
-              value={awayScore}
-              onChange={(e) => setAwayScore(e.target.value)}
-            />
+          <div className="flex flex-col items-center gap-1 pb-5">
+            <span className="text-[9px] font-black text-slate-500 tracking-wider uppercase">הניחוש שלך</span>
+            <div className="flex items-center gap-2">
+              <Input 
+                type="number" min="0" disabled={isLocked}
+                className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
+                value={homeScore}
+                onChange={(e) => setHomeScore(e.target.value)}
+              />
+              <div className="text-slate-500 font-black text-xl mb-1">:</div>
+              <Input 
+                type="number" min="0" disabled={isLocked}
+                className={`w-14 h-16 text-center text-2xl font-black rounded-2xl bg-[#070A12] border-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 shadow-inner transition-all ${isLocked ? "disabled:opacity-100 disabled:bg-[#0B0F19] disabled:text-slate-400" : ""}`}
+                value={awayScore}
+                onChange={(e) => setAwayScore(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="flex flex-col items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-white/95 border-2 border-slate-700/50 p-2 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.05)] relative overflow-hidden group">
               {awayLogo ? (
-                <img src={awayLogo} alt={awayTeam} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-110" />
+                <img src={awayLogo} alt={awayTeam} className="w-full h-full object-contain" />
               ) : (
                 <span className="text-2xl">🛡️</span>
               )}
@@ -222,20 +243,34 @@ export function MatchCard({ userId, matchId, homeTeam, homeLogo, awayTeam, awayL
           </Button>
         )}
 
+        {/* באנר נקודות מעודכן עם פירוט מלא ותוצאת אמת */}
         {isLocked && hasExistingPrediction && (
           <div className="pt-2">
             {pointsEarned === null ? (
               <div className="p-4 rounded-2xl text-center font-black text-sm border-2 bg-[#070A12] text-slate-400 border-slate-800 border-dashed">
                 ⏳ {isJoker && "🃏"} מחשב תוצאות מהמגרש...
               </div>
-            ) : pointsEarned > 0 ? (
-              <div className={`relative p-4 rounded-2xl text-center font-black text-lg border-2 overflow-hidden ${isJoker ? "bg-gradient-to-b from-amber-500/20 to-amber-900/20 text-amber-400 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)]" : "bg-gradient-to-b from-green-500/20 to-green-900/20 text-green-400 border-green-500/40 shadow-[0_0_20px_rgba(34,197,94,0.15)]"}`}>
-                <div className="absolute top-0 left-[-100%] w-[50%] h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 animate-[shimmer_3s_infinite]" />
-                {isJoker ? "🃏 מכה כפולה! " : "🏆 הפצצת! "} <span className="text-white mx-1">{pointsEarned}</span> נקודות למאזן
-              </div>
             ) : (
-               <div className="p-4 rounded-2xl text-center font-black text-sm border-2 bg-slate-900/50 text-slate-500 border-slate-800">
-                {isJoker && "🃏 "} הניחוש לא צלח הפעם 😕
+              <div className={`relative p-4 rounded-2xl border-2 overflow-hidden flex flex-col gap-1 text-center ${
+                pointsEarned > 0 
+                  ? isJoker 
+                    ? "bg-gradient-to-b from-amber-500/20 to-amber-900/20 text-amber-400 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)]" 
+                    : "bg-gradient-to-b from-green-500/20 to-green-900/20 text-green-400 border-green-500/40 shadow-[0_0_20px_rgba(34,197,94,0.15)]"
+                  : "bg-slate-900/50 text-slate-500 border-slate-800"
+              }`}>
+                <div className="absolute top-0 left-[-100%] w-[50%] h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 animate-[shimmer_3s_infinite]" />
+                
+                <div className="font-black text-md">
+                  {pointsEarned > 0 ? isJoker ? "🃏 מכה כפולה! " : "🏆 הפצצת! " : ""} 
+                  זכית ב-<span className={pointsEarned > 0 ? "text-white mx-0.5" : ""}>{pointsEarned}</span> נקודות
+                </div>
+                
+                {/* הצגת ה-Breakdown הגולמי שהתקבל מהשרת */}
+                {pointsBreakdown && (
+                  <div className={`text-[10px] font-bold tracking-wide mt-0.5 leading-normal ${pointsEarned > 0 ? "text-slate-300" : "text-slate-600"}`}>
+                    {pointsBreakdown}
+                  </div>
+                )}
               </div>
             )}
           </div>

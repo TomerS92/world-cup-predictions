@@ -56,6 +56,7 @@ export default function AdminPage() {
 
           let basePoints = 0;
           let extraPoints = 0;
+          let breakdownParts: string[] = [];
           
           const guessedHome = predData.predictedHomeScore;
           const guessedAway = predData.predictedAwayScore;
@@ -70,19 +71,41 @@ export default function AdminPage() {
 
           if (isBullseye) {
             basePoints = 5;
+            breakdownParts.push("תוצאה מדויקת (5 נק׳)");
           } else {
-            if (isDiffMatch) basePoints = 3;
-            else if (isDirectionMatch) basePoints = 1;
+            if (isDiffMatch) {
+              basePoints = 3;
+              breakdownParts.push("הפרש מדויק (3 נק׳)");
+            } else if (isDirectionMatch) {
+              basePoints = 1;
+              breakdownParts.push("כיוון נכון (1 נק׳)");
+            }
 
-            if (guessedHome === realHomeScore || guessedAway === realAwayScore) extraPoints += 1;
-            if (guessedHome + guessedAway === realHomeScore + realAwayScore) extraPoints += 1;
+            // בונוסים מבוססי שערים
+            if (guessedHome === realHomeScore || guessedAway === realAwayScore) {
+              extraPoints += 1;
+              breakdownParts.push("פגיעה בשערי קבוצה אחת (+1 נק׳)");
+            }
+            if (guessedHome + guessedAway === realHomeScore + realAwayScore) {
+              extraPoints += 1;
+              breakdownParts.push("סך שערים מדויק (+1 נק׳)");
+            }
           }
 
           let totalEarned = basePoints + extraPoints;
-          if (predData.isJoker) totalEarned *= 2;
+          let finalBreakdown = breakdownParts.length > 0 ? breakdownParts.join(" + ") : "אין נקודות במשחק זה";
 
+          if (predData.isJoker) {
+            totalEarned *= 2;
+            finalBreakdown = `🃏 ג'וקר הופעל: (${finalBreakdown}) x 2`;
+          }
+
+          // שמירה מורחבת של תוצאת האמת והפירוט במסד הנתונים
           await updateDoc(predictionDoc.ref, {
-            pointsEarned: totalEarned
+            pointsEarned: totalEarned,
+            pointsBreakdown: finalBreakdown,
+            realHomeScore: realHomeScore,
+            realAwayScore: realAwayScore
           });
 
           const userRef = doc(db, "Users", predData.userId);
@@ -113,26 +136,23 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 md:p-8 flex flex-col items-center justify-center gap-8" dir="rtl">
-      
       <Card className="w-full max-w-xl shadow-2xl border-0 bg-slate-800 text-white border-t-4 border-t-blue-500">
         <CardHeader className="border-b border-slate-700 pb-6">
           <CardTitle className="text-3xl font-black text-center text-blue-400">
             מרכז הבקרה האוטומטי 🤖
           </CardTitle>
           <CardDescription className="text-center text-slate-300 mt-3 text-base">
-            לחיצה אחת תמשוך את כל תוצאות הסיום משרתי הספורט, ותחשב ניקוד בסיס, הפרשים, בונוסי שערים וג'וקרים בצורה אוטומטית לחלוטין.
+            לחיצה אחת תמשוך את תוצאות הסיום משרתי הספורט, תחשב ניקוד, תכתוב פירוט מלא לכל שחקן ותשמור את תוצאת האמת.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-8 flex flex-col items-center gap-6">
-          
           <Button 
-            className="w-full md:w-3/4 rounded-3xl h-20 text-xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_30px_rgba(37,99,235,0.3)] hover:shadow-[0_0_40px_rgba(37,99,235,0.5)] active:scale-95 transition-all" 
+            className="w-full md:w-3/4 rounded-3xl h-20 text-xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_30px_rgba(37,99,235,0.3)] active:scale-95 transition-all" 
             onClick={handleAutoSyncAll}
             disabled={isSyncing}
           >
-            {isSyncing ? "סורק, מחשב ומעדכן נתונים..." : "הפעל סנכרון תוצאות אוטומטי"}
+            {isSyncing ? "סורק ומחשב נתונים..." : "הפעל סנכרון תוצאות אוטומטי"}
           </Button>
-
           <div className="w-full bg-[#0B0F19] rounded-xl p-4 min-h-[150px] border border-slate-700 font-mono text-sm space-y-2 overflow-y-auto max-h-[300px]">
             {syncLogs.length === 0 ? (
               <div className="text-slate-600 text-center mt-10">ממתין לפקודת סנכרון...</div>
@@ -144,7 +164,6 @@ export default function AdminPage() {
               ))
             )}
           </div>
-
         </CardContent>
       </Card>
     </div>
