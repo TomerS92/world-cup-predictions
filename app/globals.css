@@ -128,3 +128,44 @@
     @apply font-sans;
   }
 }
+
+/* ── Custom utilities ──────────────────────────────────────────────────── */
+
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Hide scrollbar (cross-browser) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Grass grid pattern (subtle background texture) */
+.pitch-grid {
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 59px, rgba(74, 222, 128, 0.04) 60px),
+    repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(74, 222, 128, 0.04) 60px);
+}
+
+/* Shimmer animation for score badges */
+@keyframes shimmer {
+  0% { transform: translateX(100%) skewX(-12deg); }
+  100% { transform: translateX(-200%) skewX(-12deg); }
+}
+.animate-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  animation: shimmer 2.5s infinite;
+}
