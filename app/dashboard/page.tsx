@@ -14,12 +14,9 @@ import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 
 interface RealMatch {
   id: string;
-  homeTeam: string;
-  homeLogo: string;
-  awayTeam: string;
-  awayLogo: string;
-  startTime: string;
-  matchDate: string;
+  homeTeam: string; homeLogo: string;
+  awayTeam: string; awayLogo: string;
+  startTime: string; matchDate: string;
   isLocked: boolean;
 }
 
@@ -28,351 +25,295 @@ async function triggerAutoSync() {
 }
 
 type FilterKey = "all" | "today" | "open" | "locked";
-
 const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: "all",    label: "הכל" },
-  { key: "today",  label: "היום" },
-  { key: "open",   label: "פתוחים" },
+  { key: "all", label: "הכל" },
+  { key: "today", label: "היום" },
+  { key: "open", label: "פתוחים" },
   { key: "locked", label: "ננעלו" },
 ];
 
+function todayStr() {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+}
+
 export default function Dashboard() {
-  const [user, setUser] = useState<DocumentData | null>(null);
+  const [user, setUser]           = useState<DocumentData | null>(null);
   const [leaderboard, setLeaderboard] = useState<DocumentData[]>([]);
-  const [realMatches, setRealMatches] = useState<RealMatch[]>([]);
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [matches, setMatches]     = useState<RealMatch[]>([]);
+  const [loadingUser, setLoadingUser]   = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
-  const [activeTab, setActiveTab] = useState<"matches" | "leaderboard">("matches");
+  const [filter, setFilter]       = useState<FilterKey>("all");
+  const [tab, setTab]             = useState<"matches" | "leaderboard">("matches");
   const router = useRouter();
 
+  // Auth + leaderboard
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) { router.push("/"); return; }
-
-      const userDoc = await getDoc(doc(db, "Users", currentUser.uid));
-      if (userDoc.exists()) setUser({ id: currentUser.uid, ...userDoc.data() });
-
+    const unsub = onAuthStateChanged(auth, async (cu) => {
+      if (!cu) { router.push("/"); return; }
+      const snap = await getDoc(doc(db, "Users", cu.uid));
+      if (snap.exists()) setUser({ id: cu.uid, ...snap.data() });
       try {
         const q = query(collection(db, "Users"), orderBy("totalPoints", "desc"));
-        const snap = await getDocs(q);
-        setLeaderboard(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error(e); }
-
+        setLeaderboard((await getDocs(q)).docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch {}
       setLoadingUser(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, [router]);
 
+  // Matches + background sync
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(getEspnScoreboardUrl());
-        const data = await res.json();
+        const data = await (await fetch(getEspnScoreboardUrl())).json();
         if (data?.events) {
-          setRealMatches(
-            data.events.map((event: any) => {
-              const comp = event.competitions[0];
-              const home = comp.competitors.find((c: any) => c.homeAway === "home");
-              const away = comp.competitors.find((c: any) => c.homeAway === "away");
-              const d = new Date(event.date);
-              const pad = (n: number) => String(n).padStart(2, "0");
-              return {
-                id: event.id,
-                homeTeam: home.team.displayName,
-                homeLogo: home.team.logo ?? "",
-                awayTeam: away.team.displayName,
-                awayLogo: away.team.logo ?? "",
-                startTime: d.toLocaleString("he-IL", {
-                  weekday: "short", month: "numeric", day: "numeric",
-                  hour: "2-digit", minute: "2-digit",
-                }),
-                matchDate: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-                isLocked: d < new Date(),
-              };
-            })
-          );
+          const pad = (n: number) => String(n).padStart(2, "0");
+          setMatches(data.events.map((e: any) => {
+            const comp = e.competitions[0];
+            const home = comp.competitors.find((c: any) => c.homeAway === "home");
+            const away = comp.competitors.find((c: any) => c.homeAway === "away");
+            const d = new Date(e.date);
+            return {
+              id: e.id,
+              homeTeam: home.team.displayName, homeLogo: home.team.logo ?? "",
+              awayTeam: away.team.displayName, awayLogo: away.team.logo ?? "",
+              startTime: d.toLocaleString("he-IL", { weekday:"short", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" }),
+              matchDate: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
+              isLocked: d < new Date(),
+            };
+          }));
         }
-      } catch (e) { console.error(e); }
-      finally { setLoadingMatches(false); }
+      } catch {}
+      setLoadingMatches(false);
     })();
     triggerAutoSync();
   }, []);
 
-  const todayStr = (() => {
-    const t = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
-  })();
-
-  const filteredMatches = realMatches.filter((m) => {
-    if (activeFilter === "open")   return !m.isLocked;
-    if (activeFilter === "locked") return m.isLocked;
-    if (activeFilter === "today")  return m.matchDate === todayStr;
+  const today = todayStr();
+  const filtered = matches.filter((m) => {
+    if (filter === "open")   return !m.isLocked;
+    if (filter === "locked") return m.isLocked;
+    if (filter === "today")  return m.matchDate === today;
     return true;
   });
 
-  if (loadingUser) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#060A10]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-[3px] border-emerald-500/30 border-t-emerald-400 animate-spin" />
-          <span className="text-xs font-bold text-slate-500 tracking-widest">טוען...</span>
-        </div>
-      </div>
-    );
-  }
+  if (loadingUser) return (
+    <div className="flex min-h-screen items-center justify-center bg-[#04080F]">
+      <div className="w-8 h-8 rounded-full border-[3px] border-emerald-500/20 border-t-emerald-400 animate-spin" />
+    </div>
+  );
 
-  const openCount  = realMatches.filter((m) => !m.isLocked).length;
-  const lockedCount = realMatches.filter((m) => m.isLocked).length;
+  const openCount   = matches.filter(m => !m.isLocked).length;
+  const lockedCount = matches.filter(m => m.isLocked).length;
 
   return (
-    <div className="min-h-screen bg-[#060A10] text-slate-100 selection:bg-emerald-500/20">
-      {/* Pitch texture backdrop */}
-      <div className="fixed inset-0 pitch-grid pointer-events-none opacity-100" aria-hidden />
+    <div className="min-h-screen bg-[#04080F] text-slate-100">
 
-      <div className="relative max-w-5xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-6">
+      {/* ── Pitch-stripe background ──────────────────────────────────────────── */}
+      <div className="fixed inset-0 pointer-events-none" aria-hidden
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(180deg, rgba(16,185,129,0.03) 0px, rgba(16,185,129,0.03) 60px, transparent 60px, transparent 120px)",
+        }}
+      />
+      {/* Top glow */}
+      <div className="fixed top-0 inset-x-0 h-64 bg-gradient-to-b from-emerald-900/10 to-transparent pointer-events-none" />
 
-        {/* ── HEADER ────────────────────────────────────────────────────────── */}
-        <header className="relative overflow-hidden bg-gradient-to-l from-[#0E1828] via-[#0D1520] to-[#0B1218] border border-white/6 rounded-2xl px-5 py-4 shadow-xl">
-          {/* Green corner accent */}
-          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-emerald-500 via-emerald-500/50 to-transparent rounded-r-full" />
+      <div className="relative max-w-5xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-5">
 
-          <div className="flex items-center justify-between gap-4">
-            {/* User info */}
-            <div className="flex items-center gap-3.5">
-              <div className="relative shrink-0">
-                <Avatar className="h-11 w-11 border-2 border-emerald-500/30 ring-2 ring-emerald-500/10">
-                  <AvatarImage src={user?.photoURL} alt={user?.displayName} />
-                  <AvatarFallback className="bg-[#1A2640] text-white font-black text-base">
-                    {user?.displayName?.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#0D1520] rounded-full" />
+        {/* ══ HEADER ══════════════════════════════════════════════════════════ */}
+        <header className="relative overflow-hidden rounded-2xl border border-white/6 shadow-2xl">
+          {/* Background: stadium night gradient */}
+          <div className="absolute inset-0 bg-gradient-to-l from-[#0A1628] via-[#071220] to-[#050D18]" />
+          {/* Accent line */}
+          <div className="absolute right-0 top-0 h-full w-1 bg-gradient-to-b from-amber-500 via-amber-400/60 to-transparent" />
+
+          <div className="relative px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              {/* User */}
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Avatar className="h-12 w-12 border-2 border-amber-500/30 ring-2 ring-amber-500/10 shadow-lg">
+                    <AvatarImage src={user?.photoURL} />
+                    <AvatarFallback className="bg-[#0A1628] text-white font-black text-lg">
+                      {user?.displayName?.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#071220] rounded-full" />
+                </div>
+                <div>
+                  <p className="font-black text-white text-sm leading-tight">{user?.displayName}</p>
+                  <p className="text-xs font-bold text-amber-400 mt-0.5">
+                    🏆 {user?.totalPoints ?? 0} נקודות
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-black text-white leading-tight">{user?.displayName}</p>
-                <p className="text-xs text-emerald-400 font-bold mt-0.5">
-                  🏆 {user?.totalPoints ?? 0} נקודות
-                </p>
-              </div>
-            </div>
 
-            {/* Right: competition badge + nav */}
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-500 border border-white/6 bg-white/3 px-3 py-1.5 rounded-full">
-                {activeConfig.icon} {activeConfig.label}
-              </span>
-              <Link href="/rules">
-                <button className="text-xs font-bold text-slate-400 hover:text-white border border-white/6 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all">
-                  חוקים 📖
+              {/* Nav */}
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 border border-white/5 bg-white/2 px-2.5 py-1 rounded-full">
+                  {activeConfig.icon} {activeConfig.label}
+                </span>
+                <Link href="/rules">
+                  <button className="text-xs font-bold text-slate-500 hover:text-white border border-white/6 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all">
+                    חוקים 📖
+                  </button>
+                </Link>
+                <button
+                  onClick={() => signOut(auth)}
+                  className="text-xs font-bold text-slate-600 hover:text-white border border-white/5 bg-white/2 hover:bg-white/5 px-3 py-1.5 rounded-xl transition-all"
+                >
+                  יציאה
                 </button>
-              </Link>
-              <button
-                className="text-xs font-bold text-slate-500 hover:text-white border border-white/5 bg-white/2 hover:bg-white/5 px-3 py-1.5 rounded-xl transition-all"
-                onClick={() => signOut(auth)}
-              >
-                יציאה
-              </button>
-            </div>
-          </div>
-
-          {/* Stats strip */}
-          <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-white/5">
-            {[
-              { label: "משחקים", value: realMatches.length, icon: "⚽" },
-              { label: "פתוחים",  value: openCount,          icon: "🟢" },
-              { label: "ננעלו",   value: lockedCount,         icon: "🔒" },
-            ].map((s) => (
-              <div key={s.label} className="text-center">
-                <p className="text-base font-black text-white">{s.icon} {s.value}</p>
-                <p className="text-[10px] text-slate-600 font-medium mt-0.5">{s.label}</p>
               </div>
-            ))}
+            </div>
+
+            {/* Stats bar */}
+            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/5">
+              {[
+                { label: "משחקים", val: matches.length, icon: "⚽" },
+                { label: "פתוחים", val: openCount, icon: "🟢" },
+                { label: "ננעלו",  val: lockedCount, icon: "🔒" },
+              ].map((s) => (
+                <div key={s.label} className="text-center">
+                  <p className="text-sm font-black text-white">{s.icon} {s.val}</p>
+                  <p className="text-[10px] text-slate-700 font-medium mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </header>
 
-        {/* ── TAB NAV ────────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 bg-[#0E1520]/80 border border-white/5 rounded-xl p-1 gap-1">
-          {(["matches", "leaderboard"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`py-2.5 rounded-lg text-sm font-black tracking-wide transition-all duration-200 ${
-                activeTab === tab
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {tab === "matches" ? "⚽ זירת הניחושים" : "📊 דירוג החברה"}
+        {/* ══ TAB SWITCHER ════════════════════════════════════════════════════ */}
+        <div className="grid grid-cols-2 bg-[#0A1020]/90 border border-white/6 rounded-2xl p-1 gap-1">
+          {(["matches","leaderboard"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`py-2.5 rounded-xl text-sm font-black tracking-wide transition-all duration-200 ${
+                tab === t
+                  ? t === "matches"
+                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
+                    : "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                  : "text-slate-600 hover:text-slate-300"
+              }`}>
+              {t === "matches" ? "⚽ זירת הניחושים" : "🏆 דירוג החברה"}
             </button>
           ))}
         </div>
 
-        {/* ── MATCHES TAB ────────────────────────────────────────────────────── */}
-        {activeTab === "matches" && (
-          <section className="space-y-5">
-            {/* Subheader */}
+        {/* ══ MATCHES ═════════════════════════════════════════════════════════ */}
+        {tab === "matches" && (
+          <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-black text-white">משחקים קרובים</h2>
-                <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                  {loadingMatches ? "טוען נתונים..." : `${filteredMatches.length} משחקים`}
+                <p className="text-xs text-slate-700 font-medium mt-0.5">
+                  {loadingMatches ? "טוען..." : `${filtered.length} משחקים`}
                 </p>
               </div>
               {loadingMatches && (
-                <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-400 bg-emerald-500/8 border border-emerald-500/15 px-3 py-1.5 rounded-full">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                  LIVE
+                <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-400 bg-emerald-500/8 border border-emerald-500/15 px-3 py-1.5 rounded-full">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />LIVE
                 </div>
               )}
             </div>
 
             {/* Filter pills */}
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-              {FILTERS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveFilter(key)}
-                  className={`shrink-0 text-xs font-black px-4 py-1.5 rounded-full border transition-all duration-200 ${
-                    activeFilter === key
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {FILTERS.map(({key, label}) => (
+                <button key={key} onClick={() => setFilter(key)}
+                  className={`shrink-0 text-xs font-black px-4 py-1.5 rounded-full border transition-all ${
+                    filter === key
                       ? "bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/20"
-                      : "bg-white/3 text-slate-500 border-white/6 hover:text-slate-200 hover:border-white/12"
-                  }`}
-                >
-                  {label}
+                      : "bg-white/3 text-slate-600 border-white/6 hover:text-slate-300 hover:border-white/12"
+                  }`}>{label}
                 </button>
               ))}
             </div>
 
-            {/* Match grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {!loadingMatches && filteredMatches.length === 0 && (
-                <div className="col-span-full text-center py-16 text-slate-600 text-sm border border-white/4 rounded-2xl border-dashed">
+              {!loadingMatches && filtered.length === 0 && (
+                <div className="col-span-full text-center text-slate-700 py-16 border border-white/4 border-dashed rounded-2xl text-sm">
                   אין משחקים בקטגוריה זו
                 </div>
               )}
-              {filteredMatches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  userId={user?.id}
-                  matchId={match.id}
-                  homeTeam={match.homeTeam}
-                  homeLogo={match.homeLogo}
-                  awayTeam={match.awayTeam}
-                  awayLogo={match.awayLogo}
-                  startTime={match.startTime}
-                  matchDate={match.matchDate}
-                  isLocked={match.isLocked}
+              {filtered.map((m) => (
+                <MatchCard key={m.id} userId={user?.id} matchId={m.id}
+                  homeTeam={m.homeTeam} homeLogo={m.homeLogo}
+                  awayTeam={m.awayTeam} awayLogo={m.awayLogo}
+                  startTime={m.startTime} matchDate={m.matchDate}
+                  isLocked={m.isLocked}
                 />
               ))}
             </div>
           </section>
         )}
 
-        {/* ── LEADERBOARD TAB ────────────────────────────────────────────────── */}
-        {activeTab === "leaderboard" && (
-          <section className="space-y-4">
+        {/* ══ LEADERBOARD ═════════════════════════════════════════════════════ */}
+        {tab === "leaderboard" && (
+          <section className="space-y-5">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-lg font-black text-white">טבלת האליפות</h2>
-                <p className="text-xs text-slate-600 mt-0.5 font-medium">מתעדכן אוטומטית</p>
+                <p className="text-xs text-slate-700 font-medium mt-0.5">מתעדכן אוטומטית</p>
               </div>
               <Link href="/rules">
-                <button className="text-xs font-bold text-slate-500 hover:text-white border border-white/6 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all">
+                <button className="text-xs font-bold text-slate-600 hover:text-white border border-white/5 bg-white/2 hover:bg-white/5 px-3 py-1.5 rounded-xl transition-all">
                   חוקים ⚖️
                 </button>
               </Link>
             </div>
 
-            {/* Top 3 podium */}
+            {/* Podium (top 3) */}
             {leaderboard.length >= 3 && (
-              <div className="grid grid-cols-3 gap-3 mb-2">
-                {[
-                  { idx: 1, player: leaderboard[1] },
-                  { idx: 0, player: leaderboard[0] },
-                  { idx: 2, player: leaderboard[2] },
-                ].map(({ idx, player }) => {
-                  const medals = ["🥇", "🥈", "🥉"];
-                  const heights = ["h-24", "h-32", "h-20"];
-                  const glows = [
-                    "shadow-yellow-500/10",
-                    "shadow-amber-400/20 border-amber-500/30",
-                    "shadow-orange-500/10",
-                  ];
-                  const isMe = player?.id === user?.id;
-                  return (
-                    <div key={idx} className="flex flex-col items-center gap-2">
-                      <Avatar className={`border-2 ${isMe ? "border-blue-500/50" : "border-white/10"} ${idx === 0 ? "h-14 w-14" : "h-11 w-11"}`}>
-                        <AvatarImage src={player?.photoURL} />
-                        <AvatarFallback className="bg-[#1A2640] text-white font-bold text-sm">
-                          {player?.displayName?.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <p className="text-[11px] font-black text-slate-300 text-center leading-tight max-w-[80px] truncate">
-                        {player?.displayName}
-                      </p>
-                      <div className={`w-full ${heights[idx === 0 ? 1 : idx === 1 ? 0 : 2]} bg-gradient-to-t from-[#0E1520] to-[#131E30] border ${glows[idx === 0 ? 1 : idx === 1 ? 0 : 2]} border-white/6 rounded-t-xl flex flex-col items-center justify-center gap-1 shadow-lg`}>
-                        <span className="text-2xl">{medals[idx]}</span>
-                        <span className="text-xs font-black text-white">{player?.totalPoints ?? 0}</span>
-                        <span className="text-[9px] text-slate-600">נק׳</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <Podium top3={leaderboard.slice(0, 3)} currentUserId={user?.id} />
             )}
 
-            {/* Full list */}
+            {/* Full rankings */}
             <div className="space-y-1.5">
-              {leaderboard.map((player, index) => {
+              {leaderboard.map((player, i) => {
                 const isMe = player.id === user?.id;
-                const medals = ["🥇", "🥈", "🥉"];
+                const medals = ["🥇","🥈","🥉"];
                 return (
-                  <div
-                    key={player.id}
+                  <div key={player.id}
                     className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                       isMe
-                        ? "bg-blue-600/8 border-blue-500/25"
+                        ? "bg-amber-500/8 border-amber-500/20"
                         : "bg-white/2 border-white/4 hover:bg-white/4 hover:border-white/8"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-6 shrink-0 text-center">
-                        {index < 3
-                          ? <span className="text-base">{medals[index]}</span>
-                          : <span className="text-[11px] font-black text-slate-600">#{index + 1}</span>
+                      <div className="w-6 text-center shrink-0">
+                        {i < 3
+                          ? <span className="text-base">{medals[i]}</span>
+                          : <span className="text-[11px] font-black text-slate-700">#{i+1}</span>
                         }
                       </div>
-                      <Avatar className={`h-9 w-9 border ${isMe ? "border-blue-400/40" : "border-white/8"}`}>
+                      <Avatar className={`h-9 w-9 border ${isMe ? "border-amber-400/40" : "border-white/8"}`}>
                         <AvatarImage src={player.photoURL} />
-                        <AvatarFallback className="bg-[#1A2640] text-white text-xs font-bold">
+                        <AvatarFallback className="bg-[#0A1628] text-white text-xs font-bold">
                           {player.displayName?.charAt(0)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-sm font-bold ${isMe ? "text-blue-300" : "text-slate-200"}`}>
+                          <span className={`text-sm font-bold ${isMe ? "text-amber-300" : "text-slate-200"}`}>
                             {player.displayName}
                           </span>
                           {isMe && (
-                            <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black">
-                              אתה
-                            </span>
+                            <span className="text-[9px] bg-amber-500 text-black px-1.5 py-0.5 rounded font-black">אתה</span>
                           )}
                         </div>
                         {(player.currentStreak ?? 0) >= 3 && (
-                          <span className="text-[10px] text-orange-400 font-bold">
-                            🔥 רצף {player.currentStreak}
-                          </span>
+                          <p className="text-[10px] text-orange-400 font-bold">🔥 רצף {player.currentStreak}</p>
                         )}
                       </div>
                     </div>
-                    <div className={`text-sm font-black px-3 py-1 rounded-lg border tabular-nums ${
-                      isMe ? "bg-blue-600/10 border-blue-500/20 text-blue-300" : "bg-white/4 border-white/5 text-slate-300"
+                    <div className={`text-sm font-black px-3 py-1.5 rounded-xl border tabular-nums ${
+                      isMe ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-white/4 border-white/5 text-slate-300"
                     }`}>
                       {player.totalPoints ?? 0}
-                      <span className="text-[10px] opacity-50 font-medium ml-0.5">נק׳</span>
+                      <span className="text-[10px] opacity-40 font-medium ml-0.5">נק׳</span>
                     </div>
                   </div>
                 );
@@ -381,6 +322,41 @@ export default function Dashboard() {
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Podium component ────────────────────────────────────────────────────────
+
+function Podium({ top3, currentUserId }: { top3: DocumentData[]; currentUserId?: string }) {
+  const positions = [
+    { data: top3[1], place: 2, height: "h-24", medal: "🥈", color: "from-slate-600/30 to-slate-700/20", border: "border-slate-500/30" },
+    { data: top3[0], place: 1, height: "h-32", medal: "🥇", color: "from-amber-600/25 to-amber-700/10", border: "border-amber-500/40" },
+    { data: top3[2], place: 3, height: "h-20", medal: "🥉", color: "from-orange-700/25 to-orange-800/10", border: "border-orange-500/25" },
+  ];
+
+  return (
+    <div className="flex items-end justify-center gap-3 px-4 pt-2 pb-0">
+      {positions.map(({ data, place, height, medal, color, border }) => {
+        const isMe = data?.id === currentUserId;
+        return (
+          <div key={place} className="flex flex-col items-center gap-2 flex-1 max-w-[110px]">
+            <Avatar className={`border-2 shadow-lg ${isMe ? "border-amber-400/60 h-14 w-14" : `${border} ${place === 1 ? "h-14 w-14" : "h-11 w-11"}`}`}>
+              <AvatarImage src={data?.photoURL} />
+              <AvatarFallback className="bg-[#0A1628] text-white font-black text-sm">
+                {data?.displayName?.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <p className="text-[11px] font-black text-slate-400 text-center leading-tight max-w-full truncate px-1">
+              {data?.displayName}
+            </p>
+            <div className={`w-full ${height} rounded-t-xl bg-gradient-to-t ${color} border-t border-x ${border} flex flex-col items-center justify-center gap-1`}>
+              <span className="text-2xl">{medal}</span>
+              <span className="text-xs font-black text-white tabular-nums">{data?.totalPoints ?? 0}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

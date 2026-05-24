@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import {
-  doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp,
+  doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, updateDoc,
 } from "firebase/firestore";
+import { getBonusQuestion } from "@/lib/bonusQuestions";
 
 interface MatchCardProps {
   userId: string;
@@ -18,73 +19,81 @@ interface MatchCardProps {
   isLocked?: boolean;
 }
 
-type InlineMsg = { type: "success" | "error" | "warning"; text: string } | null;
+type MsgType = "success" | "error" | "warning";
+type InlineMsg = { type: MsgType; text: string } | null;
 
 export function MatchCard({
   userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo,
   startTime, matchDate, isLocked = false,
 }: MatchCardProps) {
+  // ── State ──────────────────────────────────────────────────────────────────
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
-  const [isJoker, setIsJoker] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasExistingPrediction, setHasExistingPrediction] = useState(false);
-  const [pointsEarned, setPointsEarned] = useState<number | null>(null);
-  const [pointsBreakdown, setPointsBreakdown] = useState<string | null>(null);
-  const [realHomeScore, setRealHomeScore] = useState<number | null>(null);
-  const [realAwayScore, setRealAwayScore] = useState<number | null>(null);
-  const [msg, setMsg] = useState<InlineMsg>(null);
+  const [isJoker, setIsJoker]     = useState(false);
+  const [isSaving, setIsSaving]   = useState(false);
+  const [hasPrediction, setHasPrediction] = useState(false);
   const [extremeWarning, setExtremeWarning] = useState(false);
+  const [msg, setMsg] = useState<InlineMsg>(null);
 
-  // Clear message after 3 s
+  // Scored results
+  const [pointsEarned, setPointsEarned]       = useState<number | null>(null);
+  const [pointsBreakdown, setPointsBreakdown] = useState<string | null>(null);
+  const [realHomeScore, setRealHomeScore]     = useState<number | null>(null);
+  const [realAwayScore, setRealAwayScore]     = useState<number | null>(null);
+
+  // Bonus question
+  const bonusQ = getBonusQuestion(matchId);
+  const [bonusAnswer, setBonusAnswer]           = useState<boolean | null>(null);
+  const [bonusPointsEarned, setBonusPointsEarned] = useState<number | null>(null);
+  const [bonusCorrectAnswer, setBonusCorrectAnswer] = useState<boolean | null>(null);
+  const [isSavingBonus, setIsSavingBonus]       = useState(false);
+
+  // Auto-dismiss messages
   useEffect(() => {
     if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 3000);
+    const t = setTimeout(() => setMsg(null), 3500);
     return () => clearTimeout(t);
   }, [msg]);
 
   // Load existing prediction
   useEffect(() => {
-    const fetchExistingPrediction = async () => {
-      if (!userId || !matchId) return;
+    if (!userId || !matchId) return;
+    (async () => {
       try {
-        const predictionRef = doc(db, "Predictions", `${userId}_${matchId}`);
-        const docSnap = await getDoc(predictionRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setHomeScore(data.predictedHomeScore.toString());
-          setAwayScore(data.predictedAwayScore.toString());
-          setIsJoker(data.isJoker ?? false);
-          setHasExistingPrediction(true);
-          if (data.pointsEarned !== undefined) setPointsEarned(data.pointsEarned);
-          if (data.pointsBreakdown !== undefined) setPointsBreakdown(data.pointsBreakdown);
-          if (data.realHomeScore !== undefined) {
-            setRealHomeScore(data.realHomeScore);
-            setRealAwayScore(data.realAwayScore);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching prediction:", error);
+        const snap = await getDoc(doc(db, "Predictions", `${userId}_${matchId}`));
+        if (!snap.exists()) return;
+        const d = snap.data();
+        setHomeScore(d.predictedHomeScore?.toString() ?? "");
+        setAwayScore(d.predictedAwayScore?.toString() ?? "");
+        setIsJoker(d.isJoker ?? false);
+        setHasPrediction(true);
+        if (d.pointsEarned !== undefined)   setPointsEarned(d.pointsEarned);
+        if (d.pointsBreakdown !== undefined) setPointsBreakdown(d.pointsBreakdown);
+        if (d.realHomeScore !== undefined)  setRealHomeScore(d.realHomeScore);
+        if (d.realAwayScore !== undefined)  setRealAwayScore(d.realAwayScore);
+        if (d.bonusAnswer !== undefined)    setBonusAnswer(d.bonusAnswer);
+        if (d.bonusPointsEarned !== undefined) setBonusPointsEarned(d.bonusPointsEarned);
+        if (d.bonusCorrectAnswer !== undefined) setBonusCorrectAnswer(d.bonusCorrectAnswer);
+      } catch (e) {
+        console.error("Error loading prediction:", e);
       }
-    };
-    fetchExistingPrediction();
+    })();
   }, [userId, matchId]);
 
+  // ── Joker toggle ────────────────────────────────────────────────────────────
   const handleJokerToggle = async () => {
     if (isLocked) return;
     if (isJoker) { setIsJoker(false); return; }
     try {
-      const snapshot = await getDocs(
+      const snap = await getDocs(
         query(collection(db, "Predictions"), where("userId", "==", userId))
       );
-      let jokerUsed = false;
-      snapshot.forEach((d) => {
-        const data = d.data();
-        if (data.isJoker === true && data.matchDate === matchDate && data.matchId !== matchId) {
-          jokerUsed = true;
-        }
-      });
-      if (jokerUsed) {
+      const alreadyUsed = snap.docs.some(
+        (d) => d.data().isJoker === true
+          && d.data().matchDate === matchDate
+          && d.data().matchId !== matchId
+      );
+      if (alreadyUsed) {
         setMsg({ type: "warning", text: "כבר השתמשת בג׳וקר על משחק אחר היום." });
         return;
       }
@@ -94,240 +103,388 @@ export function MatchCard({
     }
   };
 
-  const handleSavePrediction = async () => {
+  // ── Save prediction ────────────────────────────────────────────────────────
+  const handleSave = async () => {
     if (isLocked) return;
-
     if (homeScore === "" || awayScore === "") {
       setMsg({ type: "error", text: "חובה למלא את שתי התוצאות." });
       return;
     }
-
-    const homeNum = Number(homeScore);
-    const awayNum = Number(awayScore);
-
-    // Extreme score warning (inline, not alert)
-    if ((Math.abs(homeNum - awayNum) >= 4 || homeNum + awayNum >= 7) && !extremeWarning) {
+    const h = Number(homeScore), a = Number(awayScore);
+    if ((Math.abs(h - a) >= 4 || h + a >= 7) && !extremeWarning) {
       setExtremeWarning(true);
       setMsg({ type: "warning", text: "תוצאה קיצונית — לחץ שוב לאישור." });
       return;
     }
     setExtremeWarning(false);
-
-    if (!userId) {
-      setMsg({ type: "error", text: "לא מחובר. רענן את הדף." });
-      return;
-    }
-
     setIsSaving(true);
     try {
       await setDoc(doc(db, "Predictions", `${userId}_${matchId}`), {
         userId, matchId, matchDate,
-        predictedHomeScore: homeNum,
-        predictedAwayScore: awayNum,
+        predictedHomeScore: h,
+        predictedAwayScore: a,
         isJoker,
+        bonusAnswer: bonusAnswer ?? null,
         updatedAt: serverTimestamp(),
       });
-      setHasExistingPrediction(true);
+      setHasPrediction(true);
       setMsg({ type: "success", text: "הניחוש נשמר! 🏆" });
-    } catch (error: any) {
-      setMsg({ type: "error", text: `שגיאה בשמירה: ${error.message}` });
+    } catch (e: any) {
+      setMsg({ type: "error", text: `שגיאה: ${e.message}` });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // ─── Derived state ───────────────────────────────────────────────────────────
-  const jokerActive = isJoker && !isLocked;
-  const cardBg = isLocked
-    ? "bg-[#0D1220]"
-    : jokerActive
-    ? "bg-gradient-to-b from-[#1C1608] to-[#110E02]"
-    : "bg-[#0D1624]";
+  // ── Save bonus answer ──────────────────────────────────────────────────────
+  const handleBonusAnswer = async (answer: boolean) => {
+    if (isLocked) return;
+    setBonusAnswer(answer);
+    if (!hasPrediction) return; // will be saved with the main prediction
+    setIsSavingBonus(true);
+    try {
+      await updateDoc(doc(db, "Predictions", `${userId}_${matchId}`), {
+        bonusAnswer: answer,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Error saving bonus:", e);
+    } finally {
+      setIsSavingBonus(false);
+    }
+  };
 
-  const cardBorder = isLocked
-    ? "border-white/4"
-    : jokerActive
-    ? "border-amber-500/30"
-    : "border-white/6 hover:border-blue-500/20";
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const jokerOn = isJoker && !isLocked;
+  const matchStatus: "upcoming" | "locked_no_result" | "scored" =
+    !isLocked ? "upcoming"
+    : pointsEarned === null ? "locked_no_result"
+    : "scored";
 
   return (
-    <div className={`relative rounded-2xl border overflow-hidden shadow-lg transition-all duration-300 ${cardBg} ${cardBorder}`}>
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-black/30 border-b border-white/5">
-        <span className="text-xs font-bold text-slate-400">{startTime}</span>
-        <div className="flex items-center gap-2">
-          {jokerActive && (
-            <span className="text-[10px] font-black text-amber-400 tracking-wider">🃏 ג׳וקר פעיל</span>
-          )}
-          {isLocked && (
-            <span className="text-[10px] font-black text-slate-500 bg-white/5 border border-white/8 px-2 py-0.5 rounded-md tracking-wider">
-              🔒 ננעל
-            </span>
-          )}
-        </div>
-      </div>
+    <article className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 ${
+      jokerOn
+        ? "bg-gradient-to-b from-[#1C1400] to-[#110D00] border-amber-500/40 shadow-[0_0_24px_rgba(245,158,11,0.12)]"
+        : isLocked
+        ? "bg-[#080E1A] border-white/5"
+        : "bg-gradient-to-b from-[#0D1829] to-[#080E1A] border-white/8 hover:border-emerald-500/20 shadow-lg shadow-black/40"
+    }`}>
 
-      <div className="px-5 py-5 space-y-5">
-        {/* Real result badge */}
+      {/* Status bar */}
+      <MatchStatusBar
+        startTime={startTime}
+        isLocked={isLocked}
+        jokerOn={jokerOn}
+        matchStatus={matchStatus}
+      />
+
+      <div className="p-5 space-y-4">
+        {/* Real result banner */}
         {isLocked && realHomeScore !== null && (
-          <div className="flex items-center justify-center gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl py-2">
-            <span className="text-[10px] font-black text-emerald-400 tracking-wider uppercase">תוצאה רשמית</span>
-            <span className="text-lg font-black text-white tabular-nums">
-              {realHomeScore} – {realAwayScore}
-            </span>
-          </div>
+          <FinalScoreBanner home={realHomeScore} away={realAwayScore!} />
         )}
 
         {/* Teams + score inputs */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          {/* Home */}
-          <TeamDisplay name={homeTeam} logo={homeLogo} />
-
-          {/* Score inputs */}
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-[9px] font-black text-slate-600 tracking-wider uppercase">ניחוש</span>
-            <div className="flex items-center gap-2">
-              <ScoreInput
-                value={homeScore}
-                disabled={isLocked}
-                onChange={setHomeScore}
-                onReset={() => setExtremeWarning(false)}
-              />
-              <span className="text-slate-500 font-black text-lg">–</span>
-              <ScoreInput
-                value={awayScore}
-                disabled={isLocked}
-                onChange={setAwayScore}
-                onReset={() => setExtremeWarning(false)}
-              />
-            </div>
-          </div>
-
-          {/* Away */}
-          <TeamDisplay name={awayTeam} logo={awayLogo} align="right" />
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <TeamCol name={homeTeam} logo={homeLogo} />
+          <ScoreArea
+            homeVal={homeScore}
+            awayVal={awayScore}
+            isLocked={isLocked}
+            onHomeChange={(v) => { setExtremeWarning(false); setHomeScore(v); }}
+            onAwayChange={(v) => { setExtremeWarning(false); setAwayScore(v); }}
+          />
+          <TeamCol name={awayTeam} logo={awayLogo} align="right" />
         </div>
 
-        {/* Actions (only when unlocked) */}
+        {/* Bonus question */}
+        <BonusQuestionRow
+          question={bonusQ}
+          answer={bonusAnswer}
+          isLocked={isLocked}
+          pointsEarned={bonusPointsEarned}
+          correctAnswer={bonusCorrectAnswer}
+          isSaving={isSavingBonus}
+          onAnswer={handleBonusAnswer}
+        />
+
+        {/* Actions */}
         {!isLocked && (
-          <div className="space-y-2">
-            {/* Joker toggle */}
+          <div className="space-y-2 pt-1">
             <button
               onClick={handleJokerToggle}
-              className={`w-full rounded-xl h-10 text-sm font-black border transition-all duration-200 ${
-                jokerActive
-                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                  : "bg-white/3 text-slate-500 border-white/6 hover:text-amber-400 hover:border-amber-500/20 hover:bg-amber-500/5"
+              className={`w-full h-10 rounded-xl text-xs font-black border transition-all duration-200 ${
+                jokerOn
+                  ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                  : "bg-white/3 text-slate-500 border-white/6 hover:text-amber-400 hover:border-amber-500/25 hover:bg-amber-500/5"
               }`}
             >
-              🃏 {jokerActive ? "ג׳וקר פעיל — נקודות כפולות!" : "הפעל ג׳וקר"}
+              🃏 {jokerOn ? "ג׳וקר פעיל — נקודות כפולות!" : "הפעל ג׳וקר (×2 נקודות)"}
             </button>
 
-            {/* Save button */}
             <button
-              onClick={handleSavePrediction}
+              onClick={handleSave}
               disabled={isSaving}
-              className="w-full rounded-xl h-11 text-sm font-black bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white shadow-md shadow-blue-600/20 transition-all duration-150 disabled:opacity-60 disabled:cursor-wait"
+              className="w-full h-11 rounded-xl text-sm font-black bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white shadow-md shadow-emerald-600/20 transition-all duration-150 disabled:opacity-50 disabled:cursor-wait"
             >
-              {isSaving ? "שומר..." : hasExistingPrediction ? "עדכן ניחוש" : "נעל ניחוש"}
+              {isSaving ? "שומר..." : hasPrediction ? "עדכן ניחוש" : "נעל ניחוש ✓"}
             </button>
           </div>
         )}
 
         {/* Inline message */}
         {msg && (
-          <div className={`text-xs font-bold text-center py-2 rounded-xl border ${
-            msg.type === "success"
-              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-              : msg.type === "warning"
-              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-              : "bg-red-500/10 text-red-400 border-red-500/20"
+          <p className={`text-xs font-bold text-center py-2 px-3 rounded-xl border ${
+            msg.type === "success" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+            : msg.type === "warning" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+            : "bg-red-500/10 text-red-400 border-red-500/20"
           }`}>
             {msg.text}
-          </div>
+          </p>
         )}
 
-        {/* Points result (locked + has prediction) */}
-        {isLocked && hasExistingPrediction && (
-          <PointsResult
+        {/* Points result */}
+        {matchStatus !== "upcoming" && hasPrediction && (
+          <PointsResultBanner
             pointsEarned={pointsEarned}
-            pointsBreakdown={pointsBreakdown}
+            breakdown={pointsBreakdown}
             isJoker={isJoker}
           />
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-function TeamDisplay({ name, logo, align = "left" }: { name: string; logo: string; align?: "left" | "right" }) {
+function MatchStatusBar({
+  startTime, isLocked, jokerOn, matchStatus,
+}: {
+  startTime: string;
+  isLocked: boolean;
+  jokerOn: boolean;
+  matchStatus: string;
+}) {
   return (
-    <div className={`flex flex-col items-center gap-2 ${align === "right" ? "text-right" : "text-left"}`}>
-      <div className="w-14 h-14 rounded-2xl bg-white/90 p-2 flex items-center justify-center shadow-sm">
-        {logo ? (
-          <img src={logo} alt={name} className="w-full h-full object-contain" />
-        ) : (
-          <span className="text-2xl">🛡️</span>
+    <div className="flex items-center justify-between px-4 py-2.5 bg-black/30 border-b border-white/5">
+      <span className="text-[11px] font-bold text-slate-500">{startTime}</span>
+      <div className="flex items-center gap-2">
+        {jokerOn && (
+          <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+            🃏 ג׳וקר
+          </span>
+        )}
+        {isLocked && matchStatus === "locked_no_result" && (
+          <span className="text-[10px] font-black text-slate-600 bg-white/3 border border-white/6 px-2 py-0.5 rounded-md">
+            🔒 ממתין לתוצאה
+          </span>
+        )}
+        {isLocked && matchStatus === "scored" && (
+          <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+            ✓ נוקד
+          </span>
+        )}
+        {!isLocked && (
+          <span className="flex items-center gap-1 text-[10px] font-black text-emerald-400">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            פתוח לניחוש
+          </span>
         )}
       </div>
-      <span className="text-[11px] font-black text-slate-300 text-center leading-tight w-full">{name}</span>
     </div>
   );
 }
 
-function ScoreInput({
-  value, disabled, onChange, onReset,
-}: {
-  value: string;
-  disabled: boolean;
-  onChange: (v: string) => void;
-  onReset: () => void;
-}) {
+function FinalScoreBanner({ home, away }: { home: number; away: number }) {
+  return (
+    <div className="flex items-center justify-center gap-4 bg-white/4 border border-white/8 rounded-xl py-2.5">
+      <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">
+        תוצאה רשמית
+      </span>
+      <span className="text-2xl font-black text-white tabular-nums tracking-tight">
+        {home} – {away}
+      </span>
+    </div>
+  );
+}
+
+function TeamCol({ name, logo, align = "left" }: { name: string; logo: string; align?: "left" | "right" }) {
+  return (
+    <div className={`flex flex-col items-center gap-2 ${align === "right" ? "items-center" : "items-center"}`}>
+      <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center overflow-hidden">
+        {logo
+          ? <img src={logo} alt={name} className="w-9 h-9 object-contain" />
+          : <span className="text-2xl">⚽</span>}
+      </div>
+      <span className="text-[11px] font-bold text-slate-300 text-center leading-tight max-w-[70px]">{name}</span>
+    </div>
+  );
+}
+
+function ScoreBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <input
       type="number"
-      min="0"
-      disabled={disabled}
+      min={0}
+      max={20}
       value={value}
-      onChange={(e) => { onReset(); onChange(e.target.value); }}
-      className="w-12 h-14 text-center text-xl font-black rounded-xl bg-black/40 border border-white/8 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/40 transition-all disabled:opacity-60 disabled:cursor-default [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder ?? "–"}
+      className="w-12 h-12 rounded-xl bg-white/6 border border-white/12 text-center text-xl font-black text-white focus:outline-none focus:border-emerald-500/50 focus:bg-emerald-500/5 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
     />
   );
 }
 
-function PointsResult({
-  pointsEarned, pointsBreakdown, isJoker,
+function ScoreArea({
+  homeVal, awayVal, isLocked, onHomeChange, onAwayChange,
+}: {
+  homeVal: string; awayVal: string; isLocked: boolean;
+  onHomeChange: (v: string) => void; onAwayChange: (v: string) => void;
+}) {
+  if (isLocked) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="w-12 h-12 rounded-xl bg-white/4 border border-white/8 flex items-center justify-center">
+          <span className="text-xl font-black text-slate-400">{homeVal !== "" ? homeVal : "–"}</span>
+        </div>
+        <span className="text-slate-600 font-black text-lg">:</span>
+        <div className="w-12 h-12 rounded-xl bg-white/4 border border-white/8 flex items-center justify-center">
+          <span className="text-xl font-black text-slate-400">{awayVal !== "" ? awayVal : "–"}</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <ScoreBox value={homeVal} onChange={onHomeChange} />
+      <span className="text-slate-600 font-black text-lg">:</span>
+      <ScoreBox value={awayVal} onChange={onAwayChange} />
+    </div>
+  );
+}
+
+function BonusQuestionRow({
+  question, answer, isLocked, pointsEarned, correctAnswer, isSaving, onAnswer,
+}: {
+  question: { text: string; tag: string; points: number };
+  answer: boolean | null;
+  isLocked: boolean;
+  pointsEarned: number | null;
+  correctAnswer: boolean | null;
+  isSaving: boolean;
+  onAnswer: (v: boolean) => void;
+}) {
+  const answered = answer !== null;
+  const scored   = pointsEarned !== null;
+
+  return (
+    <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-base">{question.tag}</span>
+        <span className="text-[11px] font-bold text-blue-300/80 leading-snug flex-1">{question.text}</span>
+        {isSaving && <span className="text-[10px] text-slate-600">שומר...</span>}
+      </div>
+
+      {/* Answered + scored */}
+      {scored ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${
+            answer ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                   : "bg-red-500/10 text-red-400 border-red-500/20"
+          }`}>
+            ענית: {answer ? "כן" : "לא"}
+          </span>
+          {correctAnswer !== null && (
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${
+              correctAnswer ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-red-500/10 text-red-400 border-red-500/20"
+            }`}>
+              תשובה: {correctAnswer ? "כן" : "לא"}
+            </span>
+          )}
+          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${
+            pointsEarned > 0 ? "bg-blue-500/15 text-blue-300 border-blue-500/20"
+                             : "bg-white/4 text-slate-600 border-white/8"
+          }`}>
+            {pointsEarned > 0 ? `+${pointsEarned} נק׳ ✓` : "0 נק׳"}
+          </span>
+        </div>
+      ) : isLocked ? (
+        /* Locked but not yet scored */
+        <div className="flex gap-2">
+          {[true, false].map((v) => (
+            <span key={String(v)} className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${
+              answer === v
+                ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
+                : "bg-white/3 text-slate-600 border-white/6"
+            }`}>
+              {v ? "כן" : "לא"}
+            </span>
+          ))}
+        </div>
+      ) : (
+        /* Open — interactive buttons */
+        <div className="flex gap-2">
+          {[true, false].map((v) => (
+            <button
+              key={String(v)}
+              onClick={() => onAnswer(v)}
+              className={`text-[11px] font-black px-3 py-1.5 rounded-lg border transition-all duration-150 ${
+                answer === v
+                  ? "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-sm"
+                  : "bg-white/3 text-slate-500 border-white/8 hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/20"
+              }`}
+            >
+              {v ? "✓ כן" : "✗ לא"}
+            </button>
+          ))}
+          {answered && (
+            <span className="self-center text-[10px] text-slate-600">נבחר {answer ? "כן" : "לא"}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PointsResultBanner({
+  pointsEarned, breakdown, isJoker,
 }: {
   pointsEarned: number | null;
-  pointsBreakdown: string | null;
+  breakdown: string | null;
   isJoker: boolean;
 }) {
   if (pointsEarned === null) {
     return (
-      <div className="text-center text-xs font-bold text-slate-600 border border-white/5 rounded-xl py-3 bg-white/2">
-        ⏳ ממתין לחישוב תוצאות...
+      <div className="text-center py-3 text-[11px] text-slate-600 font-bold">
+        ממתין לתוצאה רשמית...
       </div>
     );
   }
 
-  const isWin = pointsEarned > 0;
-  const isJokerWin = isWin && isJoker;
+  const color = pointsEarned >= 5 ? "emerald" : pointsEarned >= 3 ? "teal" : pointsEarned >= 1 ? "blue" : "slate";
+  const label = pointsEarned >= 5 ? "בול! 🎯" : pointsEarned >= 3 ? "הפרש מדויק!" : pointsEarned >= 1 ? "כיוון נכון" : "ללא נקודות";
 
   return (
-    <div className={`rounded-xl px-4 py-3 text-center border ${
-      isJokerWin
-        ? "bg-amber-500/10 border-amber-500/25 text-amber-300"
-        : isWin
-        ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
-        : "bg-white/3 border-white/6 text-slate-500"
+    <div className={`rounded-xl border px-4 py-3 text-center space-y-1 ${
+      pointsEarned > 0
+        ? `bg-${color}-500/8 border-${color}-500/20`
+        : "bg-white/3 border-white/6"
     }`}>
-      <p className="font-black text-sm">
-        {isJokerWin ? "🃏 מכה כפולה! " : isWin ? "🏆 " : ""}
-        {pointsEarned} נקודות
-      </p>
-      {pointsBreakdown && (
-        <p className="text-[10px] font-medium mt-1 opacity-70 leading-relaxed">{pointsBreakdown}</p>
+      <div className="flex items-center justify-center gap-2">
+        <span className={`text-2xl font-black ${pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"}`}>
+          {pointsEarned}
+        </span>
+        <span className={`text-sm font-black ${pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"}`}>
+          נקודות {isJoker && pointsEarned > 0 && <span className="text-amber-400">🃏</span>}
+        </span>
+      </div>
+      {breakdown && (
+        <p className="text-[10px] text-slate-600 font-bold leading-relaxed">{breakdown}</p>
+      )}
+      {pointsEarned > 0 && (
+        <p className={`text-[11px] font-black text-${color}-500/70`}>{label}</p>
       )}
     </div>
   );
