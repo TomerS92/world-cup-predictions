@@ -45,6 +45,7 @@ export async function GET() {
 
   const completed = data.events.filter((e: any) => e.status?.type?.completed === true);
   let totalProcessed = 0;
+  const processedUsers = new Set<string>(); // track who got scored this run
 
   for (const match of completed) {
     const matchId: string     = match.id;
@@ -135,9 +136,43 @@ export async function GET() {
 
       if (needsUpdate) {
         await updateDoc(predDoc.ref, updates);
+        processedUsers.add(pred.userId);
         totalProcessed++;
       }
     }
+  }
+
+  // ── Update streaks for all scored users ──────────────────────────────────
+  for (const userId of processedUsers) {
+    try {
+      // Get all their predictions to find unique match dates
+      const allPreds = await getDocs(
+        query(collection(db, "Predictions"), where("userId", "==", userId))
+      );
+      // Unique dates sorted descending (YYYY-MM-DD sorts lexicographically)
+      const dates = [...new Set<string>(
+        allPreds.docs.map((d) => d.data().matchDate as string).filter(Boolean)
+      )].sort().reverse();
+
+      if (dates.length === 0) continue;
+
+      // Count consecutive days from the most recent
+      let streak = 1;
+      for (let i = 0; i < dates.length - 1; i++) {
+        const curr = new Date(dates[i]);
+        const prev = new Date(dates[i + 1]);
+        const diffDays = Math.round(
+          (curr.getTime() - prev.getTime()) / 86400000
+        );
+        if (diffDays === 1) streak++;
+        else break;
+      }
+
+      await updateDoc(doc(db, "Users", userId), {
+        currentStreak: streak,
+        lastPredictionDate: dates[0],
+      });
+    } catch { /* non-critical */ }
   }
 
   // ── Update sync timestamp ────────────────────────────────────────────────

@@ -157,15 +157,27 @@ input[type="number"] {
     repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(74, 222, 128, 0.04) 60px);
 }
 
-/* Shimmer animation for score badges */
+/* Shimmer animation for skeleton loaders */
 @keyframes shimmer {
-  0% { transform: translateX(100%) skewX(-12deg); }
-  100% { transform: translateX(-200%) skewX(-12deg); }
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
 }
-.animate-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
-  animation: shimmer 2.5s infinite;
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% auto;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* Counter animation for points */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-count-up {
+  animation: countUp 0.4s ease-out forwards;
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { db } from "@/lib/firebase";
 import {
-  doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, updateDoc,
+  doc, setDoc, collection, query, where, getDocs, serverTimestamp, updateDoc, onSnapshot,
 } from "firebase/firestore";
 import { getBonusQuestion } from "@/lib/bonusQuestions";
 
@@ -55,29 +55,29 @@ export function MatchCard({
     return () => clearTimeout(t);
   }, [msg]);
 
-  // Load existing prediction
+  // Load + live-update prediction via real-time listener
   useEffect(() => {
     if (!userId || !matchId) return;
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, "Predictions", `${userId}_${matchId}`));
+    const unsub = onSnapshot(
+      doc(db, "Predictions", `${userId}_${matchId}`),
+      (snap) => {
         if (!snap.exists()) return;
         const d = snap.data();
         setHomeScore(d.predictedHomeScore?.toString() ?? "");
         setAwayScore(d.predictedAwayScore?.toString() ?? "");
         setIsJoker(d.isJoker ?? false);
         setHasPrediction(true);
-        if (d.pointsEarned !== undefined)   setPointsEarned(d.pointsEarned);
+        if (d.pointsEarned !== undefined)    setPointsEarned(d.pointsEarned);
         if (d.pointsBreakdown !== undefined) setPointsBreakdown(d.pointsBreakdown);
-        if (d.realHomeScore !== undefined)  setRealHomeScore(d.realHomeScore);
-        if (d.realAwayScore !== undefined)  setRealAwayScore(d.realAwayScore);
-        if (d.bonusAnswer !== undefined)    setBonusAnswer(d.bonusAnswer);
+        if (d.realHomeScore !== undefined)   setRealHomeScore(d.realHomeScore);
+        if (d.realAwayScore !== undefined)   setRealAwayScore(d.realAwayScore);
+        if (d.bonusAnswer !== undefined)     setBonusAnswer(d.bonusAnswer);
         if (d.bonusPointsEarned !== undefined) setBonusPointsEarned(d.bonusPointsEarned);
         if (d.bonusCorrectAnswer !== undefined) setBonusCorrectAnswer(d.bonusCorrectAnswer);
-      } catch (e) {
-        console.error("Error loading prediction:", e);
-      }
-    })();
+      },
+      (e) => console.error("Prediction listener error:", e)
+    );
+    return () => unsub();
   }, [userId, matchId]);
 
   // ── Joker toggle ────────────────────────────────────────────────────────────
@@ -117,6 +117,12 @@ export function MatchCard({
       return;
     }
     setExtremeWarning(false);
+
+    // Optimistic: update UI immediately before Firestore round-trip
+    const prevHasPrediction = hasPrediction;
+    setHasPrediction(true);
+    setMsg({ type: "success", text: "הניחוש נשמר! 🏆" });
+
     setIsSaving(true);
     try {
       await setDoc(doc(db, "Predictions", `${userId}_${matchId}`), {
@@ -127,9 +133,9 @@ export function MatchCard({
         bonusAnswer: bonusAnswer ?? null,
         updatedAt: serverTimestamp(),
       });
-      setHasPrediction(true);
-      setMsg({ type: "success", text: "הניחוש נשמר! 🏆" });
     } catch (e: any) {
+      // Revert optimistic update on failure
+      setHasPrediction(prevHasPrediction);
       setMsg({ type: "error", text: `שגיאה: ${e.message}` });
     } finally {
       setIsSaving(false);
@@ -448,6 +454,32 @@ function BonusQuestionRow({
   );
 }
 
+function useCountUp(target: number | null, duration = 800) {
+  const [display, setDisplay] = useState(0);
+  const prev = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target === null) return;
+    if (target === prev.current) return; // no change
+    prev.current = target;
+
+    if (target === 0) { setDisplay(0); return; }
+
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * target));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [target, duration]);
+
+  return display;
+}
+
 function PointsResultBanner({
   pointsEarned, breakdown, isJoker,
 }: {
@@ -455,6 +487,8 @@ function PointsResultBanner({
   breakdown: string | null;
   isJoker: boolean;
 }) {
+  const animated = useCountUp(pointsEarned);
+
   if (pointsEarned === null) {
     return (
       <div className="text-center py-3 text-[11px] text-slate-600 font-bold">
@@ -464,7 +498,11 @@ function PointsResultBanner({
   }
 
   const color = pointsEarned >= 5 ? "emerald" : pointsEarned >= 3 ? "teal" : pointsEarned >= 1 ? "blue" : "slate";
-  const label = pointsEarned >= 5 ? "בול! 🎯" : pointsEarned >= 3 ? "הפרש מדויק!" : pointsEarned >= 1 ? "כיוון נכון" : "ללא נקודות";
+  const label =
+    pointsEarned >= 5 ? "בול! 🎯" :
+    pointsEarned >= 3 ? "הפרש מדויק!" :
+    pointsEarned >= 1 ? "כיוון נכון" :
+    "ללא נקודות";
 
   return (
     <div className={`rounded-xl border px-4 py-3 text-center space-y-1 ${
@@ -472,16 +510,24 @@ function PointsResultBanner({
         ? `bg-${color}-500/8 border-${color}-500/20`
         : "bg-white/3 border-white/6"
     }`}>
-      <div className="flex items-center justify-center gap-2">
-        <span className={`text-2xl font-black ${pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"}`}>
-          {pointsEarned}
+      <div className="flex items-center justify-center gap-2 animate-count-up">
+        <span className={`text-2xl font-black tabular-nums ${
+          pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"
+        }`}>
+          {animated}
         </span>
-        <span className={`text-sm font-black ${pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"}`}>
-          נקודות {isJoker && pointsEarned > 0 && <span className="text-amber-400">🃏</span>}
+        <span className={`text-sm font-black ${
+          pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"
+        }`}>
+          {"נקודות"}{isJoker && pointsEarned > 0 && (
+            <span className="text-amber-400"> 🃏</span>
+          )}
         </span>
       </div>
       {breakdown && (
-        <p className="text-[10px] text-slate-600 font-bold leading-relaxed">{breakdown}</p>
+        <p className="text-[10px] text-slate-600 font-bold leading-relaxed">
+          {breakdown}
+        </p>
       )}
       {pointsEarned > 0 && (
         <p className={`text-[11px] font-black text-${color}-500/70`}>{label}</p>

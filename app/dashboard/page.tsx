@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  doc, getDoc, collection, getDocs, query, orderBy, DocumentData,
+  doc, collection, query, orderBy, onSnapshot, DocumentData,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MatchCard } from "@/components/MatchCard";
+import { MatchCardSkeleton } from "@/components/MatchCardSkeleton";
+import { HistoryTab } from "@/components/HistoryTab";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 
 interface RealMatch {
@@ -44,22 +46,37 @@ export default function Dashboard() {
   const [loadingUser, setLoadingUser]   = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [filter, setFilter]       = useState<FilterKey>("all");
-  const [tab, setTab]             = useState<"matches" | "leaderboard">("matches");
+  const [tab, setTab]             = useState<"matches" | "leaderboard" | "history">("matches");
   const router = useRouter();
 
-  // Auth + leaderboard
+  // Auth + real-time user data + real-time leaderboard
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (cu) => {
+    let unsubUser: (() => void) | null = null;
+    let unsubBoard: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (cu) => {
       if (!cu) { router.push("/"); return; }
-      const snap = await getDoc(doc(db, "Users", cu.uid));
-      if (snap.exists()) setUser({ id: cu.uid, ...snap.data() });
+
+      // Live user document
+      unsubUser = onSnapshot(doc(db, "Users", cu.uid), (snap) => {
+        if (snap.exists()) setUser({ id: cu.uid, ...snap.data() });
+        setLoadingUser(false);
+      });
+
+      // Live leaderboard
       try {
         const q = query(collection(db, "Users"), orderBy("totalPoints", "desc"));
-        setLeaderboard((await getDocs(q)).docs.map((d) => ({ id: d.id, ...d.data() })));
+        unsubBoard = onSnapshot(q, (snap) => {
+          setLeaderboard(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        });
       } catch {}
-      setLoadingUser(false);
     });
-    return () => unsub();
+
+    return () => {
+      unsubAuth();
+      unsubUser?.();
+      unsubBoard?.();
+    };
   }, [router]);
 
   // Matches + background sync
@@ -155,6 +172,11 @@ export default function Dashboard() {
                 <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 border border-white/5 bg-white/2 px-2.5 py-1 rounded-full">
                   {activeConfig.icon} {activeConfig.label}
                 </span>
+                <Link href="/profile">
+                  <button className="text-xs font-bold text-slate-500 hover:text-white border border-white/6 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all">
+                    פרופיל 👤
+                  </button>
+                </Link>
                 <Link href="/rules">
                   <button className="text-xs font-bold text-slate-500 hover:text-white border border-white/6 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all">
                     חוקים 📖
@@ -170,14 +192,15 @@ export default function Dashboard() {
             </div>
 
             {/* Stats bar */}
-            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/5">
+            <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/5">
               {[
                 { label: "משחקים", val: matches.length, icon: "⚽" },
                 { label: "פתוחים", val: openCount, icon: "🟢" },
                 { label: "ננעלו",  val: lockedCount, icon: "🔒" },
+                { label: "רצף",    val: (user?.currentStreak ?? 0) >= 1 ? `🔥${user?.currentStreak}` : "–", icon: "" },
               ].map((s) => (
                 <div key={s.label} className="text-center">
-                  <p className="text-sm font-black text-white">{s.icon} {s.val}</p>
+                  <p className="text-sm font-black text-white">{s.icon}{s.val}</p>
                   <p className="text-[10px] text-slate-700 font-medium mt-0.5">{s.label}</p>
                 </div>
               ))}
@@ -186,17 +209,19 @@ export default function Dashboard() {
         </header>
 
         {/* ══ TAB SWITCHER ════════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-2 bg-[#0A1020]/90 border border-white/6 rounded-2xl p-1 gap-1">
-          {(["matches","leaderboard"] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`py-2.5 rounded-xl text-sm font-black tracking-wide transition-all duration-200 ${
-                tab === t
-                  ? t === "matches"
-                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
-                    : "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+        <div className="grid grid-cols-3 bg-[#0A1020]/90 border border-white/6 rounded-2xl p-1 gap-1">
+          {([
+            { key: "matches",     label: "⚽ ניחושים",  active: "bg-emerald-600 shadow-emerald-600/25" },
+            { key: "leaderboard", label: "🏆 דירוג",    active: "bg-amber-500 shadow-amber-500/25" },
+            { key: "history",     label: "📋 היסטוריה", active: "bg-blue-600 shadow-blue-600/25" },
+          ] as const).map(({ key, label, active }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`py-2.5 rounded-xl text-xs font-black tracking-wide transition-all duration-200 ${
+                tab === key
+                  ? `${active} text-white shadow-md`
                   : "text-slate-600 hover:text-slate-300"
               }`}>
-              {t === "matches" ? "⚽ זירת הניחושים" : "🏆 דירוג החברה"}
+              {label}
             </button>
           ))}
         </div>
@@ -232,6 +257,9 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {loadingMatches && Array.from({ length: 4 }).map((_, i) => (
+                <MatchCardSkeleton key={i} />
+              ))}
               {!loadingMatches && filtered.length === 0 && (
                 <div className="col-span-full text-center text-slate-700 py-16 border border-white/4 border-dashed rounded-2xl text-sm">
                   אין משחקים בקטגוריה זו
@@ -247,6 +275,11 @@ export default function Dashboard() {
               ))}
             </div>
           </section>
+        )}
+
+        {/* ══ HISTORY ═════════════════════════════════════════════════════════ */}
+        {tab === "history" && user?.id && (
+          <HistoryTab userId={user.id} />
         )}
 
         {/* ══ LEADERBOARD ═════════════════════════════════════════════════════ */}
@@ -330,9 +363,12 @@ export default function Dashboard() {
 
 function Podium({ top3, currentUserId }: { top3: DocumentData[]; currentUserId?: string }) {
   const positions = [
-    { data: top3[1], place: 2, height: "h-24", medal: "🥈", color: "from-slate-600/30 to-slate-700/20", border: "border-slate-500/30" },
-    { data: top3[0], place: 1, height: "h-32", medal: "🥇", color: "from-amber-600/25 to-amber-700/10", border: "border-amber-500/40" },
-    { data: top3[2], place: 3, height: "h-20", medal: "🥉", color: "from-orange-700/25 to-orange-800/10", border: "border-orange-500/25" },
+    { data: top3[0], place: 1, height: "h-32",
+      medal: "🥇", color: "from-amber-600/25 to-amber-700/10",
+      border: "border-amber-500/40" },
+    { data: top3[2], place: 3, height: "h-20",
+      medal: "🥉", color: "from-orange-700/25 to-orange-800/10",
+      border: "border-orange-500/25" },
   ];
 
   return (
@@ -341,7 +377,11 @@ function Podium({ top3, currentUserId }: { top3: DocumentData[]; currentUserId?:
         const isMe = data?.id === currentUserId;
         return (
           <div key={place} className="flex flex-col items-center gap-2 flex-1 max-w-[110px]">
-            <Avatar className={`border-2 shadow-lg ${isMe ? "border-amber-400/60 h-14 w-14" : `${border} ${place === 1 ? "h-14 w-14" : "h-11 w-11"}`}`}>
+            <Avatar className={`border-2 shadow-lg ${
+              isMe
+                ? "border-amber-400/60 h-14 w-14"
+                : `${border} ${place === 1 ? "h-14 w-14" : "h-11 w-11"}`
+            }`}>
               <AvatarImage src={data?.photoURL} />
               <AvatarFallback className="bg-[#0A1628] text-white font-black text-sm">
                 {data?.displayName?.charAt(0)}
@@ -352,7 +392,9 @@ function Podium({ top3, currentUserId }: { top3: DocumentData[]; currentUserId?:
             </p>
             <div className={`w-full ${height} rounded-t-xl bg-gradient-to-t ${color} border-t border-x ${border} flex flex-col items-center justify-center gap-1`}>
               <span className="text-2xl">{medal}</span>
-              <span className="text-xs font-black text-white tabular-nums">{data?.totalPoints ?? 0}</span>
+              <span className="text-xs font-black text-white tabular-nums">
+                {data?.totalPoints ?? 0}
+              </span>
             </div>
           </div>
         );
