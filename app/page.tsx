@@ -39,7 +39,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#04080F]">
+    <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#070E1A]">
 
       {/* ── Layered background ─────────────────────────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>

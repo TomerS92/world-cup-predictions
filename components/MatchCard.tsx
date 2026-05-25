@@ -170,10 +170,10 @@ export function MatchCard({
   return (
     <article className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 ${
       jokerOn
-        ? "bg-gradient-to-b from-[#1C1400] to-[#110D00] border-amber-500/40 shadow-[0_0_24px_rgba(245,158,11,0.12)]"
+        ? "bg-gradient-to-b from-[#1C1400] to-[#0E0A00] border-amber-500/50 shadow-[0_0_28px_rgba(245,158,11,0.15)]"
         : isLocked
-        ? "bg-[#080E1A] border-white/5"
-        : "bg-gradient-to-b from-[#0D1829] to-[#080E1A] border-white/8 hover:border-emerald-500/20 shadow-lg shadow-black/40"
+        ? "bg-[#0C1420] border-white/10"
+        : "bg-gradient-to-b from-[#101E35] to-[#0A1525] border-white/12 hover:border-emerald-500/30 shadow-lg shadow-black/30"
     }`}>
 
       {/* Status bar */}
@@ -254,6 +254,8 @@ export function MatchCard({
           <PointsResultBanner
             pointsEarned={pointsEarned}
             breakdown={pointsBreakdown}
+            bonusPointsEarned={bonusPointsEarned}
+            bonusCorrectAnswer={bonusCorrectAnswer}
             isJoker={isJoker}
           />
         )}
@@ -273,8 +275,8 @@ function MatchStatusBar({
   matchStatus: string;
 }) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 bg-black/30 border-b border-white/5">
-      <span className="text-[11px] font-bold text-slate-500">{startTime}</span>
+    <div className="flex items-center justify-between px-4 py-2.5 bg-black/20 border-b border-white/8">
+      <span className="text-[11px] font-bold text-slate-400">{startTime}</span>
       <div className="flex items-center gap-2">
         {jokerOn && (
           <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
@@ -282,7 +284,7 @@ function MatchStatusBar({
           </span>
         )}
         {isLocked && matchStatus === "locked_no_result" && (
-          <span className="text-[10px] font-black text-slate-600 bg-white/3 border border-white/6 px-2 py-0.5 rounded-md">
+          <span className="text-[10px] font-black text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
             🔒 ממתין לתוצאה
           </span>
         )}
@@ -304,13 +306,18 @@ function MatchStatusBar({
 
 function FinalScoreBanner({ home, away }: { home: number; away: number }) {
   return (
-    <div className="flex items-center justify-center gap-4 bg-white/4 border border-white/8 rounded-xl py-2.5">
-      <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">
-        תוצאה רשמית
-      </span>
-      <span className="text-2xl font-black text-white tabular-nums tracking-tight">
-        {home} – {away}
-      </span>
+    <div className="relative overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-l from-emerald-900/40 to-teal-900/20 px-4 py-3">
+      {/* Subtle glow */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/5 to-transparent pointer-events-none" />
+      <div className="relative flex items-center justify-center gap-3">
+        <span className="text-[11px] font-black text-emerald-400/80 tracking-widest uppercase">
+          תוצאה רשמית
+        </span>
+        <span className="w-px h-4 bg-emerald-500/30" />
+        <span className="text-3xl font-black text-white tabular-nums tracking-tight drop-shadow-sm">
+          {home} – {away}
+        </span>
+      </div>
     </div>
   );
 }
@@ -481,56 +488,90 @@ function useCountUp(target: number | null, duration = 800) {
 }
 
 function PointsResultBanner({
-  pointsEarned, breakdown, isJoker,
+  pointsEarned, breakdown, bonusPointsEarned, bonusCorrectAnswer, isJoker,
 }: {
   pointsEarned: number | null;
   breakdown: string | null;
+  bonusPointsEarned: number | null;
+  bonusCorrectAnswer: boolean | null;
   isJoker: boolean;
 }) {
-  const animated = useCountUp(pointsEarned);
+  const totalPts = (pointsEarned ?? 0) + (bonusPointsEarned ?? 0);
+  const animated = useCountUp(pointsEarned !== null ? totalPts : null);
 
   if (pointsEarned === null) {
     return (
-      <div className="text-center py-3 text-[11px] text-slate-600 font-bold">
+      <div className="text-center py-3 text-[11px] text-slate-500 font-bold">
         ממתין לתוצאה רשמית...
       </div>
     );
   }
 
-  const color = pointsEarned >= 5 ? "emerald" : pointsEarned >= 3 ? "teal" : pointsEarned >= 1 ? "blue" : "slate";
+  const color = totalPts >= 7 ? "emerald" : totalPts >= 5 ? "emerald" : totalPts >= 3 ? "teal" : totalPts >= 1 ? "blue" : "slate";
   const label =
     pointsEarned >= 5 ? "בול! 🎯" :
     pointsEarned >= 3 ? "הפרש מדויק!" :
-    pointsEarned >= 1 ? "כיוון נכון" :
+    pointsEarned >= 1 ? "ניחשת את המנצח" :
     "ללא נקודות";
 
   return (
-    <div className={`rounded-xl border px-4 py-3 text-center space-y-1 ${
-      pointsEarned > 0
-        ? `bg-${color}-500/8 border-${color}-500/20`
-        : "bg-white/3 border-white/6"
+    <div className={`rounded-xl border px-4 py-3 space-y-2 ${
+      totalPts > 0
+        ? `bg-${color}-500/8 border-${color}-500/25`
+        : "bg-white/3 border-white/8"
     }`}>
       <div className="flex items-center justify-center gap-2 animate-count-up">
-        <span className={`text-2xl font-black tabular-nums ${
-          pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"
+        <span className={`text-3xl font-black tabular-nums ${
+          totalPts > 0 ? `text-${color}-400` : "text-slate-500"
         }`}>
           {animated}
         </span>
-        <span className={`text-sm font-black ${
-          pointsEarned > 0 ? `text-${color}-400` : "text-slate-600"
-        }`}>
-          {"נקודות"}{isJoker && pointsEarned > 0 && (
-            <span className="text-amber-400"> 🃏</span>
+        <div className="flex flex-col items-start">
+          <span className={`text-sm font-black leading-tight ${
+            totalPts > 0 ? `text-${color}-400` : "text-slate-500"
+          }`}>
+            {"נקודות"}
+            {isJoker && totalPts > 0 && (
+              <span className="text-amber-400"> {"🃏"}</span>
+            )}
+          </span>
+          {totalPts > 0 && (
+            <span className={`text-[10px] font-black text-${color}-500/70`}>
+              {label}
+            </span>
           )}
-        </span>
+        </div>
       </div>
-      {breakdown && (
-        <p className="text-[10px] text-slate-600 font-bold leading-relaxed">
-          {breakdown}
-        </p>
-      )}
-      {pointsEarned > 0 && (
-        <p className={`text-[11px] font-black text-${color}-500/70`}>{label}</p>
+
+      {/* Breakdown rows */}
+      {(breakdown || bonusPointsEarned !== null) && (
+        <div className="border-t border-white/8 pt-2 space-y-1">
+          {breakdown && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500 font-medium">
+                {breakdown}
+              </span>
+              <span className="text-[11px] font-black text-slate-300 tabular-nums">
+                +{pointsEarned}
+              </span>
+            </div>
+          )}
+          {bonusPointsEarned !== null && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500 font-medium">
+                {"שאלת בונוס — "}
+                {bonusCorrectAnswer !== null
+                  ? bonusCorrectAnswer ? "כן" : "לא"
+                  : "?"}
+              </span>
+              <span className={`text-[11px] font-black tabular-nums ${
+                bonusPointsEarned > 0 ? "text-blue-400" : "text-slate-600"
+              }`}>
+                {bonusPointsEarned > 0 ? `+${bonusPointsEarned}` : "0"}
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

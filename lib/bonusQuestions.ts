@@ -109,24 +109,36 @@ export function detectBonusAnswer(
     // ── Detail-based (requires ESPN details array) ────────────────────────────
     case "red_card": {
       if (!details.length) return null; // can't detect
-      return details.some(
-        (d) =>
-          d.type?.abbreviation?.toUpperCase() === "RC" ||
-          d.type?.text?.toLowerCase().includes("red card") ||
-          d.type?.id === "93" // ESPN type ID for red card in soccer
-      );
+      // ESPN known type IDs: 86 = Red Card, 93 = Sending Off (alt), 200 = Red Card (some comps)
+      // Also catches second-yellow situations via text/abbreviation
+      const RED_IDS = new Set(["86", "93", "200"]);
+      return details.some((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        const id   = d.type?.id ?? "";
+        return (
+          abbr === "RC"  ||
+          abbr === "YRC" ||  // second yellow → red
+          abbr === "RY"  ||
+          text.includes("red card") ||
+          text.includes("sending off") ||
+          text.includes("dismissed") ||
+          RED_IDS.has(id)
+        );
+      });
     }
 
     case "brace": {
       if (!details.length) return null;
-      // Count goals per athlete ID
+      const GOAL_ABBRS = new Set(["G", "PG"]); // G=goal PG=penalty; OG=own goal excluded
       const goalCounts: Record<string, number> = {};
       details.forEach((d) => {
-        const isGoal =
-          d.type?.abbreviation?.toUpperCase() === "G" ||
-          d.type?.abbreviation?.toUpperCase() === "PG" || // penalty goal
-          d.type?.text?.toLowerCase().includes("goal");
-        if (!isGoal) return;
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        const isOwnGoal = abbr === "OG" || text.includes("own goal");
+        const isGoal    = GOAL_ABBRS.has(abbr) ||
+                          (!isOwnGoal && text.includes("goal scored"));
+        if (!isGoal || isOwnGoal) return;
         d.athletesInvolved?.forEach((a) => {
           if (a.id) goalCounts[a.id] = (goalCounts[a.id] ?? 0) + 1;
         });

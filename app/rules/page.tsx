@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function RulesPage() {
   return (
-    <div className="min-h-screen bg-[#04080F] text-slate-100">
+    <div className="min-h-screen bg-[#070E1A] text-slate-100">
       <div className="fixed inset-0 pointer-events-none" aria-hidden
         style={{ backgroundImage:"repeating-linear-gradient(180deg, rgba(16,185,129,0.025) 0px, rgba(16,185,129,0.025) 60px, transparent 60px, transparent 120px)" }}
       />
@@ -40,9 +40,9 @@ export default function RulesPage() {
             <h3 className="text-sm font-black text-white flex items-center gap-2 mb-3">🎯 ניקוד בסיסי</h3>
             <div className="space-y-2.5">
               {[
-                { color:"emerald", pts:"5", title:"פגיעה בול", desc:"תוצאה מדויקת לחלוטין.", ex:"ניחשת 2-1 ← נגמר 2-1" },
-                { color:"teal",    pts:"3", title:"הפרש מדויק", desc:"הכיוון נכון + הפרש השערים נכון.", ex:"ניחשת 2-0 ← נגמר 3-1 (הפרש 2)" },
-                { color:"blue",    pts:"1", title:"כיוון נכון", desc:"ניחשת נכון מי ניצח, בלי הפרש מדויק.", ex:"ניחשת 1-0 ← נגמר 4-0" },
+                { color:"emerald", pts:"5", title:"פגיעה בול", desc:"תוצאה מדויקת לחלוטין — מספר השערים של כל קבוצה.", ex:"ניחשת 2-1 ← נגמר 2-1" },
+                { color:"teal",    pts:"3", title:"הפרש מדויק", desc:"ניחשת נכון מי ניצח ובכמה שערי הפרש (לא בול).", ex:"ניחשת 2-0 ← נגמר 3-1 (הפרש 2)" },
+                { color:"blue",    pts:"1", title:"ניחשת את המנצח", desc:"ניחשת נכון מי ניצח (או תיקו) — אבל לא ההפרש.", ex:"ניחשת 1-0 ← נגמר 4-1" },
               ].map((t) => (
                 <div key={t.title} className={`relative bg-white/2 border border-${t.color}-500/20 rounded-xl p-4 overflow-hidden`}>
                   <div className={`absolute right-0 inset-y-0 w-1 bg-${t.color}-500 rounded-r-xl`} />
@@ -129,7 +129,6 @@ export default function RulesPage() {
                 </div>
               ))}
               <div className="col-span-2 flex items-center justify-between bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2">
-                <span className="text-emerald-300 text-xs font-bold">סה״כ מקסימום (עם ג׳וקר)</span>
                 <span className="font-black text-emerald-300 text-sm">18 נק׳</span>
               </div>
             </div>

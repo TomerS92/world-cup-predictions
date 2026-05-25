@@ -89,7 +89,7 @@ export async function GET() {
 
         if (isBull)       { base = 5; parts.push("תוצאה מדויקת (5 נק׳)"); }
         else if (isDiff)  { base = 3; parts.push("הפרש מדויק (3 נק׳)"); }
-        else if (isDir)   { base = 1; parts.push("כיוון נכון (1 נק׳)"); }
+        else if (isDir)   { base = 1; parts.push("ניחשת את המנצח (1 נק׳)"); }
 
         if (!isBull) {
           if (g1 === realHome || g2 === realAway) { extra += 1; parts.push("פגיעה בשערי קבוצה (+1)"); }

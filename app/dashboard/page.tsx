@@ -97,7 +97,7 @@ export default function Dashboard() {
               awayTeam: away.team.displayName, awayLogo: away.team.logo ?? "",
               startTime: d.toLocaleString("he-IL", { weekday:"short", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" }),
               matchDate: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
-              isLocked: d < new Date(),
+              isLocked: d < new Date(Date.now() + 15 * 60 * 1000), // lock 15 min before kickoff
             };
           }));
         }
@@ -116,7 +116,7 @@ export default function Dashboard() {
   });
 
   if (loadingUser) return (
-    <div className="flex min-h-screen items-center justify-center bg-[#04080F]">
+    <div className="flex min-h-screen items-center justify-center bg-[#070E1A]">
       <div className="w-8 h-8 rounded-full border-[3px] border-emerald-500/20 border-t-emerald-400 animate-spin" />
     </div>
   );
@@ -125,7 +125,7 @@ export default function Dashboard() {
   const lockedCount = matches.filter(m => m.isLocked).length;
 
   return (
-    <div className="min-h-screen bg-[#04080F] text-slate-100">
+    <div className="min-h-screen bg-[#070E1A] text-slate-100">
 
       {/* ── Pitch-stripe background ──────────────────────────────────────────── */}
       <div className="fixed inset-0 pointer-events-none" aria-hidden

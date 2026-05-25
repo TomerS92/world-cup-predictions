@@ -63,7 +63,7 @@ export default function ProfilePage() {
   }, [router]);
 
   if (loading) return (
-    <div className="flex min-h-screen items-center justify-center bg-[#04080F]">
+    <div className="flex min-h-screen items-center justify-center bg-[#070E1A]">
       <div className="w-8 h-8 rounded-full border-[3px] border-emerald-500/20 border-t-emerald-400 animate-spin" />
     </div>
   );
@@ -82,7 +82,7 @@ export default function ProfilePage() {
   const streak   = user?.currentStreak ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#04080F] text-slate-100" dir="rtl">
+    <div className="min-h-screen bg-[#070E1A] text-slate-100" dir="rtl">
       {/* Background */}
       <div className="fixed inset-0 pointer-events-none" aria-hidden
         style={{ backgroundImage: "repeating-linear-gradient(180deg, rgba(16,185,129,0.025) 0px, rgba(16,185,129,0.025) 60px, transparent 60px, transparent 120px)" }}
