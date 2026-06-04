@@ -7,7 +7,7 @@
  *   'world_cup_2026'  → FIFA World Cup 2026 (June 11 – July 19 2026)
  */
 
-export type CompetitionKey = "premier_league" | "world_cup_2026";
+export type CompetitionKey = "premier_league" | "world_cup_2026" | "international_friendlies";
 
 export interface CompetitionConfig {
   name: string;
@@ -36,10 +36,17 @@ export const COMPETITIONS: Record<CompetitionKey, CompetitionConfig> = {
     label: "מונדיאל 2026",
     icon: "🌍",
   },
+  international_friendlies: {
+    name: "International Friendlies",
+    espnSlug: "fifa.friendly",
+    dateRange: "20260604-20260605",
+    label: "ידידות לאומיות",
+    icon: "🌐",
+  },
 };
 
 // ─── CHANGE THIS LINE TO SWITCH COMPETITION ───────────────────────────────────
-export const ACTIVE_COMPETITION: CompetitionKey = "premier_league";
+export const ACTIVE_COMPETITION: CompetitionKey = "international_friendlies";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const activeConfig = COMPETITIONS[ACTIVE_COMPETITION];

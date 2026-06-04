@@ -4,6 +4,7 @@ import { useState } from "react";
 import { db } from "@/lib/firebase";
 import {
   collection, query, where, getDocs, doc, updateDoc, increment, getDoc,
+  deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 
@@ -11,8 +12,50 @@ export default function AdminPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   const addLog = (msg: string) => setSyncLogs((prev) => [msg, ...prev]);
+
+  const handleReset = async () => {
+    if (!resetConfirm) { setResetConfirm(true); return; }
+    setResetConfirm(false);
+    setIsResetting(true);
+    setSyncLogs([]);
+    addLog("מוחק את כל הניחושים...");
+    try {
+      const predsSnap = await getDocs(collection(db, "Predictions"));
+      let batch = writeBatch(db);
+      let count = 0;
+      for (const d of predsSnap.docs) {
+        batch.delete(d.ref);
+        count++;
+        if (count % 500 === 0) { await batch.commit(); batch = writeBatch(db); }
+      }
+      if (count % 500 !== 0) await batch.commit();
+      addLog(`נמחקו ${count} ניחושים.`);
+
+      addLog("מאפס נקודות ורצפים לכל המשתמשים...");
+      const usersSnap = await getDocs(collection(db, "Users"));
+      let batch2 = writeBatch(db);
+      let ucount = 0;
+      for (const u of usersSnap.docs) {
+        batch2.update(u.ref, { totalPoints: 0, currentStreak: 0, lastPredictionDate: null });
+        ucount++;
+        if (ucount % 500 === 0) { await batch2.commit(); batch2 = writeBatch(db); }
+      }
+      if (ucount % 500 !== 0) await batch2.commit();
+      addLog(`אופסו ${ucount} משתמשים.`);
+
+      const metaRef = doc(db, "_meta", "syncStatus");
+      await deleteDoc(metaRef).catch(() => null);
+      addLog("✅ איפוס הושלם! כל הנתונים נמחקו.");
+    } catch (err: any) {
+      addLog(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -162,6 +205,31 @@ export default function AdminPage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* Reset data */}
+        <div className="bg-[#0E1520]/90 border border-red-500/15 rounded-2xl p-5 shadow-xl space-y-3">
+          <p className="text-xs font-bold text-red-400/80 text-center">
+            ⚠️ איפוס נתונים — מוחק את כל הניחושים ומאפס נקודות לכולם
+          </p>
+          <button
+            onClick={handleReset}
+            disabled={isResetting}
+            className={`w-full h-12 rounded-xl text-sm font-black transition-all duration-200 ${
+              isResetting
+                ? "bg-red-700/30 text-red-400 cursor-wait"
+                : resetConfirm
+                ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 animate-pulse"
+                : "bg-red-900/40 hover:bg-red-800/50 text-red-400 border border-red-500/20"
+            }`}
+          >
+            {isResetting ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                מוחק נתונים...
+              </span>
+            ) : resetConfirm ? "⚠️ לחץ שוב לאישור סופי — פעולה בלתי הפיכה!" : "מחק את כל הנתונים"}
+          </button>
         </div>
 
         {/* Info note */}
