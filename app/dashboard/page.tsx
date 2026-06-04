@@ -19,6 +19,7 @@ interface RealMatch {
   homeTeam: string; homeLogo: string;
   awayTeam: string; awayLogo: string;
   startTime: string; matchDate: string;
+  rawStartTime: string;
   isLocked: boolean;
 }
 
@@ -97,7 +98,8 @@ export default function Dashboard() {
               awayTeam: away.team.displayName, awayLogo: away.team.logo ?? "",
               startTime: d.toLocaleString("he-IL", { weekday:"short", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" }),
               matchDate: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
-              isLocked: d < new Date(Date.now() + 15 * 60 * 1000), // lock 15 min before kickoff
+              rawStartTime: e.date,
+              isLocked: d.getTime() - Date.now() <= 15 * 60 * 1000,
             };
           }));
         }
@@ -270,7 +272,7 @@ export default function Dashboard() {
                   homeTeam={m.homeTeam} homeLogo={m.homeLogo}
                   awayTeam={m.awayTeam} awayLogo={m.awayLogo}
                   startTime={m.startTime} matchDate={m.matchDate}
-                  isLocked={m.isLocked}
+                  rawStartTime={m.rawStartTime}
                 />
               ))}
             </div>

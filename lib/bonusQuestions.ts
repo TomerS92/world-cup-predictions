@@ -1,19 +1,9 @@
-/**
- * Bonus Questions System
- * ─────────────────────────────────────────────────────────────────────────────
- * Each match gets ONE bonus yes/no question worth 2 points.
- * The question is selected deterministically from the pool based on the matchId,
- * so every player sees the same question for the same match.
- *
- * Detection runs automatically during the sync API call using ESPN data.
- */
-
 export type BonusQuestionType =
-  | "five_plus_goals"
-  | "big_win"
-  | "draw"
   | "red_card"
-  | "brace";
+  | "penalty_goal"
+  | "three_yellows"
+  | "both_teams_yellow"
+  | "own_goal";
 
 export interface BonusQuestion {
   type: BonusQuestionType;
@@ -27,34 +17,34 @@ export interface BonusQuestion {
 
 export const BONUS_QUESTION_POOL: BonusQuestion[] = [
   {
-    type: "five_plus_goals",
-    text: "האם יהיו 5 שערים ומעלה בסך הכל?",
-    points: 2,
-    tag: "⚽",
-  },
-  {
-    type: "big_win",
-    text: "האם קבוצה תנצח ב-3 שערי הפרש ומעלה?",
-    points: 2,
-    tag: "💥",
-  },
-  {
-    type: "draw",
-    text: "האם המשחק יסתיים בתיקו?",
-    points: 2,
-    tag: "🤝",
-  },
-  {
     type: "red_card",
-    text: "האם יהיה לפחות כרטיס אדום אחד?",
+    text: "האם יוצא לפחות כרטיס אדום אחד במשחק?",
     points: 2,
     tag: "🟥",
   },
   {
-    type: "brace",
-    text: "האם שחקן כלשהו יגבה 2 שערים ומעלה?",
+    type: "penalty_goal",
+    text: "האם יבוצע שער מפנדל?",
     points: 2,
     tag: "🎯",
+  },
+  {
+    type: "three_yellows",
+    text: "האם יוצגו לפחות 3 כרטיסים צהובים?",
+    points: 2,
+    tag: "🟨",
+  },
+  {
+    type: "both_teams_yellow",
+    text: "האם שתי הקבוצות יקבלו לפחות כרטיס צהוב אחד?",
+    points: 2,
+    tag: "⚠️",
+  },
+  {
+    type: "own_goal",
+    text: "האם יהיה שער עצמי במשחק?",
+    points: 2,
+    tag: "🤦",
   },
 ];
 
@@ -83,11 +73,11 @@ export interface ESPNDetail {
 /**
  * Detect the correct yes/no answer for a bonus question from ESPN match data.
  *
- * @param type        The question type
- * @param homeScore   Final home score (from scoreboard)
- * @param awayScore   Final away score (from scoreboard)
- * @param details     competition.details[] from ESPN (may be empty)
- * @returns           true/false if detectable, null if detection impossible
+ * @param type      The question type
+ * @param homeScore Final home score (from scoreboard)
+ * @param awayScore Final away score (from scoreboard)
+ * @param details   competition.details[] from ESPN (may be empty)
+ * @returns         true/false if detectable, null if detection impossible
  */
 export function detectBonusAnswer(
   type: BonusQuestionType,
@@ -96,21 +86,8 @@ export function detectBonusAnswer(
   details: ESPNDetail[]
 ): boolean | null {
   switch (type) {
-    // ── Score-based (always reliable) ────────────────────────────────────────
-    case "five_plus_goals":
-      return homeScore + awayScore >= 5;
-
-    case "big_win":
-      return Math.abs(homeScore - awayScore) >= 3;
-
-    case "draw":
-      return homeScore === awayScore;
-
-    // ── Detail-based (requires ESPN details array) ────────────────────────────
     case "red_card": {
-      if (!details.length) return null; // can't detect
-      // ESPN known type IDs: 86 = Red Card, 93 = Sending Off (alt), 200 = Red Card (some comps)
-      // Also catches second-yellow situations via text/abbreviation
+      if (!details.length) return null;
       const RED_IDS = new Set(["86", "93", "200"]);
       return details.some((d) => {
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
@@ -118,7 +95,7 @@ export function detectBonusAnswer(
         const id   = d.type?.id ?? "";
         return (
           abbr === "RC"  ||
-          abbr === "YRC" ||  // second yellow → red
+          abbr === "YRC" ||
           abbr === "RY"  ||
           text.includes("red card") ||
           text.includes("sending off") ||
@@ -128,22 +105,44 @@ export function detectBonusAnswer(
       });
     }
 
-    case "brace": {
+    case "penalty_goal": {
       if (!details.length) return null;
-      const GOAL_ABBRS = new Set(["G", "PG"]); // G=goal PG=penalty; OG=own goal excluded
-      const goalCounts: Record<string, number> = {};
-      details.forEach((d) => {
+      return details.some((d) => {
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
-        const isOwnGoal = abbr === "OG" || text.includes("own goal");
-        const isGoal    = GOAL_ABBRS.has(abbr) ||
-                          (!isOwnGoal && text.includes("goal scored"));
-        if (!isGoal || isOwnGoal) return;
-        d.athletesInvolved?.forEach((a) => {
-          if (a.id) goalCounts[a.id] = (goalCounts[a.id] ?? 0) + 1;
-        });
+        return abbr === "PG" || text.includes("penalty") && text.includes("goal");
       });
-      return Object.values(goalCounts).some((count) => count >= 2);
+    }
+
+    case "three_yellows": {
+      if (!details.length) return null;
+      const count = details.filter((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        return abbr === "YC" || text === "yellow card";
+      }).length;
+      return count >= 3;
+    }
+
+    case "both_teams_yellow": {
+      if (!details.length) return null;
+      const teamsWithYellow = new Set<string>();
+      for (const d of details) {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        const isYellow = abbr === "YC" || text === "yellow card";
+        if (isYellow && d.team?.id) teamsWithYellow.add(d.team.id);
+      }
+      return teamsWithYellow.size >= 2;
+    }
+
+    case "own_goal": {
+      if (!details.length) return null;
+      return details.some((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        return abbr === "OG" || text.includes("own goal");
+      });
     }
 
     default:

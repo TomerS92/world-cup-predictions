@@ -7,6 +7,12 @@ import {
 } from "firebase/firestore";
 import { getBonusQuestion } from "@/lib/bonusQuestions";
 
+const LOCK_BEFORE_MS = 15 * 60 * 1000; // 15 minutes
+
+function computeIsLocked(rawStartTime: string): boolean {
+  return new Date(rawStartTime).getTime() - Date.now() <= LOCK_BEFORE_MS;
+}
+
 interface MatchCardProps {
   userId: string;
   matchId: string;
@@ -16,7 +22,7 @@ interface MatchCardProps {
   awayLogo: string;
   startTime: string;
   matchDate: string;
-  isLocked?: boolean;
+  rawStartTime: string;
 }
 
 type MsgType = "success" | "error" | "warning";
@@ -24,9 +30,10 @@ type InlineMsg = { type: MsgType; text: string } | null;
 
 export function MatchCard({
   userId, matchId, homeTeam, homeLogo, awayTeam, awayLogo,
-  startTime, matchDate, isLocked = false,
+  startTime, matchDate, rawStartTime,
 }: MatchCardProps) {
   // ── State ──────────────────────────────────────────────────────────────────
+  const [isLocked, setIsLocked] = useState(() => computeIsLocked(rawStartTime));
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
   const [isJoker, setIsJoker]     = useState(false);
@@ -47,6 +54,15 @@ export function MatchCard({
   const [bonusPointsEarned, setBonusPointsEarned] = useState<number | null>(null);
   const [bonusCorrectAnswer, setBonusCorrectAnswer] = useState<boolean | null>(null);
   const [isSavingBonus, setIsSavingBonus]       = useState(false);
+
+  // Dynamic lock: re-check every 30 s so the card locks automatically at T-15 min
+  useEffect(() => {
+    if (isLocked) return; // already locked, no need to poll
+    const id = setInterval(() => {
+      if (computeIsLocked(rawStartTime)) setIsLocked(true);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [isLocked, rawStartTime]);
 
   // Auto-dismiss messages
   useEffect(() => {
