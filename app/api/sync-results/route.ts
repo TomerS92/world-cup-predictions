@@ -87,13 +87,12 @@ export async function GET() {
           (g1 < g2 && realHome < realAway) ||
           (g1 === g2 && realHome === realAway);
 
-        if (isBull)       { base = 5; parts.push("תוצאה מדויקת (5 נק׳)"); }
+        if (isBull)       { base = 6; parts.push("תוצאה מדויקת (6 נק׳)"); }
         else if (isDiff)  { base = 3; parts.push("הפרש מדויק (3 נק׳)"); }
-        else if (isDir)   { base = 1; parts.push("ניחשת את המנצח (1 נק׳)"); }
+        else if (isDir)   { base = 2; parts.push("ניחשת את המנצח (2 נק׳)"); }
 
         if (!isBull) {
           if (g1 === realHome || g2 === realAway) { extra += 1; parts.push("פגיעה בשערי קבוצה (+1)"); }
-          if (g1 + g2 === realHome + realAway)    { extra += 1; parts.push("סך שערים (+1)"); }
         }
 
         let total = base + extra;
@@ -115,7 +114,7 @@ export async function GET() {
       if (pred.bonusPointsEarned === undefined && pred.bonusAnswer !== undefined && pred.bonusAnswer !== null) {
         if (bonusAnswer !== null) {
           const correct = pred.bonusAnswer === bonusAnswer;
-          const bonusPts = correct ? 2 : 0;
+          const bonusPts = correct ? 1 : 0;
           updates.bonusPointsEarned  = bonusPts;
           updates.bonusCorrectAnswer = bonusAnswer;
           updates.bonusDetectionNote = "auto";

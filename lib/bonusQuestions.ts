@@ -3,7 +3,10 @@ export type BonusQuestionType =
   | "penalty_goal"
   | "three_yellows"
   | "both_teams_yellow"
-  | "own_goal";
+  | "own_goal"
+  | "double_yellow_red"
+  | "four_plus_yellows"
+  | "penalty_or_red";
 
 export interface BonusQuestion {
   type: BonusQuestionType;
@@ -19,32 +22,50 @@ export const BONUS_QUESTION_POOL: BonusQuestion[] = [
   {
     type: "red_card",
     text: "האם יוצא לפחות כרטיס אדום אחד במשחק?",
-    points: 2,
+    points: 1,
     tag: "🟥",
   },
   {
     type: "penalty_goal",
     text: "האם יבוצע שער מפנדל?",
-    points: 2,
+    points: 1,
     tag: "🎯",
   },
   {
     type: "three_yellows",
     text: "האם יוצגו לפחות 3 כרטיסים צהובים?",
-    points: 2,
+    points: 1,
     tag: "🟨",
   },
   {
     type: "both_teams_yellow",
     text: "האם שתי הקבוצות יקבלו לפחות כרטיס צהוב אחד?",
-    points: 2,
+    points: 1,
     tag: "⚠️",
   },
   {
     type: "own_goal",
     text: "האם יהיה שער עצמי במשחק?",
-    points: 2,
+    points: 1,
     tag: "🤦",
+  },
+  {
+    type: "double_yellow_red",
+    text: "האם שחקן כלשהו יגורש בשל שני כרטיסים צהובים?",
+    points: 1,
+    tag: "🟡🟥",
+  },
+  {
+    type: "four_plus_yellows",
+    text: "האם יחולקו לפחות 4 כרטיסים צהובים במשחק?",
+    points: 1,
+    tag: "🟨🟨",
+  },
+  {
+    type: "penalty_or_red",
+    text: "האם יהיה לפחות אירוע דרמטי אחד — פנדל או כרטיס אדום?",
+    points: 1,
+    tag: "⚡",
   },
 ];
 
@@ -142,6 +163,42 @@ export function detectBonusAnswer(
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
         return abbr === "OG" || text.includes("own goal");
+      });
+    }
+
+    case "double_yellow_red": {
+      if (!details.length) return null;
+      return details.some((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        return abbr === "YRC" || abbr === "RY" || text.includes("second yellow") || text.includes("yellow red");
+      });
+    }
+
+    case "four_plus_yellows": {
+      if (!details.length) return null;
+      const count = details.filter((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        return abbr === "YC" || text === "yellow card";
+      }).length;
+      return count >= 4;
+    }
+
+    case "penalty_or_red": {
+      if (!details.length) return null;
+      const RED_IDS = new Set(["86", "93", "200"]);
+      return details.some((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        const id   = d.type?.id ?? "";
+        return (
+          abbr === "PG" ||
+          (text.includes("penalty") && text.includes("goal")) ||
+          abbr === "RC" || abbr === "YRC" || abbr === "RY" ||
+          text.includes("red card") || text.includes("sending off") ||
+          RED_IDS.has(id)
+        );
       });
     }
 

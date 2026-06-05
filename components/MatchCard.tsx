@@ -524,11 +524,16 @@ function PointsResultBanner({
   }
 
   const color = totalPts >= 7 ? "emerald" : totalPts >= 5 ? "emerald" : totalPts >= 3 ? "teal" : totalPts >= 1 ? "blue" : "slate";
-  const label =
-    pointsEarned >= 5 ? "בול! 🎯" :
-    pointsEarned >= 3 ? "הפרש מדויק!" :
-    pointsEarned >= 1 ? "ניחשת את המנצח" :
-    "ללא נקודות";
+
+  // Derive label from the breakdown text so it's always accurate
+  const label = (() => {
+    if (totalPts === 0) return "ללא נקודות";
+    if (breakdown?.includes("תוצאה מדויקת")) return "בול! 🎯";
+    if (breakdown?.includes("הפרש מדויק")) return "הפרש מדויק!";
+    if (breakdown?.includes("ניחשת את המנצח")) return "ניחשת כיוון!";
+    if (pointsEarned > 0) return "פגיעה חלקית!";
+    return "בונוס בלבד 🎁";
+  })();
 
   return (
     <div className={`rounded-xl border px-4 py-3 space-y-2 ${
@@ -562,7 +567,7 @@ function PointsResultBanner({
       {/* Breakdown rows */}
       {(breakdown || bonusPointsEarned !== null) && (
         <div className="border-t border-white/8 pt-2 space-y-1">
-          {breakdown && (
+          {breakdown && breakdown !== "אין נקודות" && (
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 font-medium">
                 {breakdown}

@@ -40,9 +40,9 @@ export default function RulesPage() {
             <h3 className="text-sm font-black text-white flex items-center gap-2 mb-3">🎯 ניקוד בסיסי</h3>
             <div className="space-y-2.5">
               {[
-                { color:"emerald", pts:"5", title:"פגיעה בול", desc:"תוצאה מדויקת לחלוטין — מספר השערים של כל קבוצה.", ex:"ניחשת 2-1 ← נגמר 2-1" },
+                { color:"emerald", pts:"6", title:"פגיעה בול", desc:"תוצאה מדויקת לחלוטין — מספר השערים של כל קבוצה.", ex:"ניחשת 2-1 ← נגמר 2-1" },
                 { color:"teal",    pts:"3", title:"הפרש מדויק", desc:"ניחשת נכון מי ניצח ובכמה שערי הפרש (לא בול).", ex:"ניחשת 2-0 ← נגמר 3-1 (הפרש 2)" },
-                { color:"blue",    pts:"1", title:"ניחשת את המנצח", desc:"ניחשת נכון מי ניצח (או תיקו) — אבל לא ההפרש.", ex:"ניחשת 1-0 ← נגמר 4-1" },
+                { color:"blue",    pts:"2", title:"ניחשת את המנצח", desc:"ניחשת נכון מי ניצח (או תיקו) — אבל לא ההפרש.", ex:"ניחשת 1-0 ← נגמר 4-1" },
               ].map((t) => (
                 <div key={t.title} className={`relative bg-white/2 border border-${t.color}-500/20 rounded-xl p-4 overflow-hidden`}>
                   <div className={`absolute right-0 inset-y-0 w-1 bg-${t.color}-500 rounded-r-xl`} />
@@ -67,7 +67,6 @@ export default function RulesPage() {
             <div className="grid sm:grid-cols-2 gap-2.5">
               {[
                 { title:"פגיעה בקבוצה אחת", desc:"ניחשת נכון את מספר השערים של אחת הקבוצות.", pts:"+1" },
-                { title:"סך שערים מדויק",   desc:"סכום השערים שניחשת = סכום בפועל.",          pts:"+1" },
               ].map((b) => (
                 <div key={b.title} className="bg-white/2 border border-white/6 rounded-xl p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -88,12 +87,12 @@ export default function RulesPage() {
               <span>❓</span> שאלת בונוס למשחק
             </h3>
             <p className="text-slate-400 text-sm leading-relaxed">
-              כל משחק מגיע עם שאלת <span className="font-bold text-white">כן/לא</span> אחת — למשל: "האם יהיה כרטיס אדום?", "האם יהיו 5+ שערים?" וכדומה.
+              כל משחק מגיע עם שאלת <span className="font-bold text-white">כן/לא</span> אחת — למשל: "האם יהיה כרטיס אדום?", "האם יהיה שער מפנדל?", "האם יהיה שחקן שיגורש?" וכדומה.
               <br /><br />
               התשובה מזוהה <span className="font-bold text-white">אוטומטית</span> מנתוני ESPN לאחר המשחק ומנוקדת בלי שצריך לעשות כלום.
             </p>
             <div className="mt-3 inline-flex items-center gap-2 text-xs font-black text-blue-300 bg-blue-500/12 border border-blue-500/20 px-3 py-1.5 rounded-lg">
-              תשובה נכונה: +2 נקודות
+              תשובה נכונה: +1 נקודה
             </div>
           </div>
 
@@ -117,10 +116,9 @@ export default function RulesPage() {
             </h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
-                { label: "פגיעה בול", pts: "5", color: "emerald" },
-                { label: "סך שערים", pts: "+1", color: "blue" },
+                { label: "פגיעה בול", pts: "6", color: "emerald" },
                 { label: "קבוצה אחת", pts: "+1", color: "blue" },
-                { label: "שאלת בונוס", pts: "+2", color: "blue" },
+                { label: "שאלת בונוס", pts: "+1", color: "blue" },
                 { label: "ג׳וקר ×2", pts: "×2", color: "amber" },
               ].map((r) => (
                 <div key={r.label} className="flex items-center justify-between bg-white/3 border border-white/6 rounded-xl px-3 py-2">
@@ -129,7 +127,7 @@ export default function RulesPage() {
                 </div>
               ))}
               <div className="col-span-2 flex items-center justify-between bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2">
-                <span className="font-black text-emerald-300 text-sm">18 נק׳</span>
+                <span className="font-black text-emerald-300 text-sm">15 נק׳</span>
               </div>
             </div>
           </div>

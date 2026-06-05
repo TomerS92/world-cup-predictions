@@ -101,16 +101,13 @@ export default function AdminPage() {
             (guessedHome < guessedAway && realHomeScore < realAwayScore) ||
             (guessedHome === guessedAway && realHomeScore === realAwayScore);
 
-          if (isBullseye) { basePoints = 5; parts.push("תוצאה מדויקת (5 נק׳)"); }
+          if (isBullseye) { basePoints = 6; parts.push("תוצאה מדויקת (6 נק׳)"); }
           else if (isDiff) { basePoints = 3; parts.push("הפרש מדויק (3 נק׳)"); }
-          else if (isDir)  { basePoints = 1; parts.push("כיוון נכון (1 נק׳)"); }
+          else if (isDir)  { basePoints = 2; parts.push("ניחשת את המנצח (2 נק׳)"); }
 
           if (!isBullseye) {
             if (guessedHome === realHomeScore || guessedAway === realAwayScore) {
               extraPoints += 1; parts.push("פגיעה בשערי קבוצה (+1)");
-            }
-            if (guessedHome + guessedAway === realHomeScore + realAwayScore) {
-              extraPoints += 1; parts.push("סך שערים מדויק (+1)");
             }
           }
 
