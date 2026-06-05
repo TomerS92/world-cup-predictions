@@ -105,9 +105,9 @@ export default function Home() {
           {/* Score pills */}
           <div className="grid grid-cols-3 gap-2 mb-6">
             {[
-              { top: "5 נק׳", bot: "תוצאה בול", color: "text-emerald-400" },
+              { top: "6 נק׳", bot: "תוצאה בול", color: "text-emerald-400" },
               { top: "×2", bot: "ג׳וקר", color: "text-amber-400" },
-              { top: "2 נק׳", bot: "בונוס", color: "text-blue-400" },
+              { top: "1 נק׳", bot: "בונוס", color: "text-blue-400" },
             ].map((s) => (
               <div key={s.bot} className="flex flex-col items-center gap-0.5 bg-white/4 border border-white/6 rounded-2xl py-3">
                 <span className={`text-lg font-black ${s.color}`}>{s.top}</span>
