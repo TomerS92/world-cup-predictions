@@ -48,8 +48,8 @@ export function MatchCard({
   const [realHomeScore, setRealHomeScore]     = useState<number | null>(null);
   const [realAwayScore, setRealAwayScore]     = useState<number | null>(null);
 
-  // Bonus question
-  const bonusQ = getBonusQuestion(matchId);
+  // Bonus question — pass teams so player_scores questions use the right player
+  const bonusQ = getBonusQuestion(matchId, homeTeam, awayTeam);
   const [bonusAnswer, setBonusAnswer]           = useState<boolean | null>(null);
   const [bonusPointsEarned, setBonusPointsEarned] = useState<number | null>(null);
   const [bonusCorrectAnswer, setBonusCorrectAnswer] = useState<boolean | null>(null);

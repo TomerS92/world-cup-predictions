@@ -6,107 +6,121 @@ export type BonusQuestionType =
   | "own_goal"
   | "double_yellow_red"
   | "four_plus_yellows"
-  | "penalty_or_red";
+  | "penalty_or_red"
+  | "defender_scores"
+  | "player_scores";
 
 export interface BonusQuestion {
   type: BonusQuestionType;
-  /** Hebrew question text shown to players */
   text: string;
-  /** Points awarded for correct answer */
   points: number;
-  /** Short emoji tag shown on the card */
   tag: string;
+  /** English player name for ESPN matching — only set when type === "player_scores" */
+  playerName?: string;
 }
 
+// ─── Static question pool (used when no star player is in the match) ──────────
 export const BONUS_QUESTION_POOL: BonusQuestion[] = [
-  {
-    type: "red_card",
-    text: "האם יוצא לפחות כרטיס אדום אחד במשחק?",
-    points: 1,
-    tag: "🟥",
-  },
-  {
-    type: "penalty_goal",
-    text: "האם יבוצע שער מפנדל?",
-    points: 1,
-    tag: "🎯",
-  },
-  {
-    type: "three_yellows",
-    text: "האם יוצגו לפחות 3 כרטיסים צהובים?",
-    points: 1,
-    tag: "🟨",
-  },
-  {
-    type: "both_teams_yellow",
-    text: "האם שתי הקבוצות יקבלו לפחות כרטיס צהוב אחד?",
-    points: 1,
-    tag: "⚠️",
-  },
-  {
-    type: "own_goal",
-    text: "האם יהיה שער עצמי במשחק?",
-    points: 1,
-    tag: "🤦",
-  },
-  {
-    type: "double_yellow_red",
-    text: "האם שחקן כלשהו יגורש בשל שני כרטיסים צהובים?",
-    points: 1,
-    tag: "🟡🟥",
-  },
-  {
-    type: "four_plus_yellows",
-    text: "האם יחולקו לפחות 4 כרטיסים צהובים במשחק?",
-    points: 1,
-    tag: "🟨🟨",
-  },
-  {
-    type: "penalty_or_red",
-    text: "האם יהיה לפחות אירוע דרמטי אחד — פנדל או כרטיס אדום?",
-    points: 1,
-    tag: "⚡",
-  },
+  { type: "red_card",          text: "האם יוצא לפחות כרטיס אדום אחד במשחק?",                  points: 1, tag: "🟥"   },
+  { type: "penalty_goal",      text: "האם יבוצע שער מפנדל?",                                    points: 1, tag: "🎯"   },
+  { type: "three_yellows",     text: "האם יוצגו לפחות 3 כרטיסים צהובים?",                       points: 1, tag: "🟨"   },
+  { type: "both_teams_yellow", text: "האם שתי הקבוצות יקבלו לפחות כרטיס צהוב אחד?",            points: 1, tag: "⚠️"   },
+  { type: "own_goal",          text: "האם יהיה שער עצמי במשחק?",                                points: 1, tag: "🤦"   },
+  { type: "double_yellow_red", text: "האם שחקן כלשהו יגורש בשל שני כרטיסים צהובים?",           points: 1, tag: "🟡🟥" },
+  { type: "four_plus_yellows", text: "האם יחולקו לפחות 4 כרטיסים צהובים במשחק?",               points: 1, tag: "🟨🟨" },
+  { type: "penalty_or_red",    text: "האם יהיה לפחות אירוע דרמטי אחד — פנדל או כרטיס אדום?", points: 1, tag: "⚡"   },
+  { type: "defender_scores",   text: "האם מגן יבקיע במשחק?",                                   points: 1, tag: "🛡️"  },
 ];
 
+// ─── World Cup 2026 star players — keyed by ESPN team display name ─────────────
+interface StarPlayer { hebrewName: string; displayName: string }
+
+export const WORLD_CUP_STAR_PLAYERS: Record<string, StarPlayer> = {
+  "Argentina":     { hebrewName: "מסי",       displayName: "Lionel Messi"       },
+  "France":        { hebrewName: "מבאפה",      displayName: "Kylian Mbappe"      },
+  "Portugal":      { hebrewName: "רונאלדו",    displayName: "Cristiano Ronaldo"  },
+  "Norway":        { hebrewName: "הולאנד",     displayName: "Erling Haaland"     },
+  "England":       { hebrewName: "קיין",       displayName: "Harry Kane"         },
+  "Brazil":        { hebrewName: "ויניציוס",   displayName: "Vinicius Jr."       },
+  "Uruguay":       { hebrewName: "ולוורדה",    displayName: "Federico Valverde"  },
+  "Spain":         { hebrewName: "יאמאל",      displayName: "Lamine Yamal"       },
+  "United States": { hebrewName: "פוליסיץ׳",  displayName: "Christian Pulisic"  },
+  "USA":           { hebrewName: "פוליסיץ׳",  displayName: "Christian Pulisic"  },
+  "Turkey":        { hebrewName: "ילדיז",      displayName: "Kenan Yildiz"       },
+  "Türkiye":       { hebrewName: "ילדיז",      displayName: "Kenan Yildiz"       },
+  "Germany":       { hebrewName: "הברץ",       displayName: "Kai Havertz"        },
+  "Egypt":         { hebrewName: "סאלח",       displayName: "Mohamed Salah"      },
+  "Sweden":        { hebrewName: "איסאק",      displayName: "Alexander Isak"     },
+  "Netherlands":   { hebrewName: "גאקפו",      displayName: "Cody Gakpo"         },
+  "Belgium":       { hebrewName: "דוקו",       displayName: "Jeremy Doku"        },
+  "Senegal":       { hebrewName: "מאנה",       displayName: "Sadio Mane"         },
+};
+
 /**
- * Deterministic selection: same matchId always returns the same question.
- * Uses a weighted char-code hash so adjacent IDs pick different questions.
+ * Returns the bonus question for a match.
+ * When a team with a mapped star player is playing, always asks about that player.
+ * If both teams have star players, one is chosen deterministically by matchId hash.
+ * Falls back to the static pool for matches with no mapped team.
  */
-export function getBonusQuestion(matchId: string): BonusQuestion {
+export function getBonusQuestion(
+  matchId: string,
+  homeTeam?: string,
+  awayTeam?: string,
+): BonusQuestion {
   const hash = matchId
     .split("")
     .reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
+
+  const candidates: StarPlayer[] = [];
+  for (const team of [homeTeam, awayTeam]) {
+    if (team && WORLD_CUP_STAR_PLAYERS[team]) {
+      candidates.push(WORLD_CUP_STAR_PLAYERS[team]);
+    }
+  }
+
+  if (candidates.length > 0) {
+    const player = candidates[hash % candidates.length];
+    return {
+      type: "player_scores",
+      text: `האם ${player.hebrewName} יבקיע במשחק?`,
+      points: 1,
+      tag: "⭐",
+      playerName: player.displayName,
+    };
+  }
+
   return BONUS_QUESTION_POOL[hash % BONUS_QUESTION_POOL.length];
 }
 
-/**
- * ESPN match detail item (from competition.details[]).
- * Only the fields we actually use are typed.
- */
+// ─── ESPN detail type ──────────────────────────────────────────────────────────
 export interface ESPNDetail {
   type?: { id?: string; text?: string; abbreviation?: string };
-  athletesInvolved?: { id?: string; displayName?: string }[];
+  athletesInvolved?: {
+    id?: string;
+    displayName?: string;
+    position?: { name?: string; abbreviation?: string };
+  }[];
   team?: { id?: string };
   clock?: { value?: number };
 }
 
+// Strips accents and lowercases for resilient name matching
+function normalize(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 /**
- * Detect the correct yes/no answer for a bonus question from ESPN match data.
- *
- * @param type      The question type
- * @param homeScore Final home score (from scoreboard)
- * @param awayScore Final away score (from scoreboard)
- * @param details   competition.details[] from ESPN (may be empty)
- * @returns         true/false if detectable, null if detection impossible
+ * Detect the yes/no answer for a bonus question from ESPN match data.
+ * Returns null when detection is impossible (missing ESPN data).
  */
 export function detectBonusAnswer(
-  type: BonusQuestionType,
+  bonusQ: BonusQuestion,
   homeScore: number,
   awayScore: number,
   details: ESPNDetail[]
 ): boolean | null {
-  switch (type) {
+  switch (bonusQ.type) {
+
     case "red_card": {
       if (!details.length) return null;
       const RED_IDS = new Set(["86", "93", "200"]);
@@ -114,15 +128,9 @@ export function detectBonusAnswer(
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
         const id   = d.type?.id ?? "";
-        return (
-          abbr === "RC"  ||
-          abbr === "YRC" ||
-          abbr === "RY"  ||
-          text.includes("red card") ||
-          text.includes("sending off") ||
-          text.includes("dismissed") ||
-          RED_IDS.has(id)
-        );
+        return abbr === "RC" || abbr === "YRC" || abbr === "RY" ||
+          text.includes("red card") || text.includes("sending off") || text.includes("dismissed") ||
+          RED_IDS.has(id);
       });
     }
 
@@ -131,7 +139,7 @@ export function detectBonusAnswer(
       return details.some((d) => {
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
-        return abbr === "PG" || text.includes("penalty") && text.includes("goal");
+        return abbr === "PG" || (text.includes("penalty") && text.includes("goal"));
       });
     }
 
@@ -151,8 +159,9 @@ export function detectBonusAnswer(
       for (const d of details) {
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
-        const isYellow = abbr === "YC" || text === "yellow card";
-        if (isYellow && d.team?.id) teamsWithYellow.add(d.team.id);
+        if ((abbr === "YC" || text === "yellow card") && d.team?.id) {
+          teamsWithYellow.add(d.team.id);
+        }
       }
       return teamsWithYellow.size >= 2;
     }
@@ -192,13 +201,48 @@ export function detectBonusAnswer(
         const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
         const text = d.type?.text?.toLowerCase() ?? "";
         const id   = d.type?.id ?? "";
-        return (
-          abbr === "PG" ||
-          (text.includes("penalty") && text.includes("goal")) ||
+        return abbr === "PG" || (text.includes("penalty") && text.includes("goal")) ||
           abbr === "RC" || abbr === "YRC" || abbr === "RY" ||
-          text.includes("red card") || text.includes("sending off") ||
-          RED_IDS.has(id)
-        );
+          text.includes("red card") || text.includes("sending off") || RED_IDS.has(id);
+      });
+    }
+
+    case "defender_scores": {
+      if (!details.length) return null;
+      const GOAL_ABBRS = new Set(["G", "PG"]);
+      const goalEvents = details.filter((d) =>
+        GOAL_ABBRS.has(d.type?.abbreviation?.toUpperCase() ?? "")
+      );
+      if (!goalEvents.length) return false;
+
+      const DEFENDER_TERMS = ["defender", "back", "cb", "lb", "rb", "df", "centre back", "center back", "full back", "fullback"];
+      let hasPositionData = false;
+
+      for (const goal of goalEvents) {
+        for (const athlete of (goal.athletesInvolved ?? [])) {
+          const posName = (athlete.position?.name ?? "").toLowerCase();
+          const posAbbr = (athlete.position?.abbreviation ?? "").toLowerCase();
+          if (posName || posAbbr) hasPositionData = true;
+          if (DEFENDER_TERMS.some((t) => posName.includes(t)) || posAbbr === "df" || posAbbr === "d") {
+            return true;
+          }
+        }
+      }
+      // If ESPN provided position data but no defender scored → false. If no position data → null.
+      return hasPositionData ? false : null;
+    }
+
+    case "player_scores": {
+      if (!details.length || !bonusQ.playerName) return null;
+      const GOAL_ABBRS = new Set(["G", "PG"]);
+      const targetName = normalize(bonusQ.playerName);
+      return details.some((d) => {
+        if (!GOAL_ABBRS.has(d.type?.abbreviation?.toUpperCase() ?? "")) return false;
+        return (d.athletesInvolved ?? []).some((a) => {
+          const espnName = normalize(a.displayName ?? "");
+          // Match if either name contains the other (handles "Vinicius Jr." vs "Vinicius Junior")
+          return espnName.includes(targetName) || targetName.includes(espnName);
+        });
       });
     }
 

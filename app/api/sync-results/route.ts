@@ -55,10 +55,12 @@ export async function GET() {
     const realHome            = parseInt(homeComp.score, 10);
     const realAway            = parseInt(awayComp.score, 10);
     const details: ESPNDetail[] = comp.details ?? [];
+    const homeTeamName: string = homeComp.team?.displayName ?? "";
+    const awayTeamName: string = awayComp.team?.displayName ?? "";
 
     // Detect bonus question answer for this match
-    const bonusQ      = getBonusQuestion(matchId);
-    const bonusAnswer = detectBonusAnswer(bonusQ.type, realHome, realAway, details);
+    const bonusQ      = getBonusQuestion(matchId, homeTeamName, awayTeamName);
+    const bonusAnswer = detectBonusAnswer(bonusQ, realHome, realAway, details);
 
     // ── Score each prediction ─────────────────────────────────────────────────
     const predsSnap = await getDocs(
