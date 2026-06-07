@@ -58,9 +58,9 @@ export const WORLD_CUP_STAR_PLAYERS: Record<string, StarPlayer> = {
 
 /**
  * Returns the bonus question for a match.
- * When a team with a mapped star player is playing, always asks about that player.
- * If both teams have star players, one is chosen deterministically by matchId hash.
- * Falls back to the static pool for matches with no mapped team.
+ * Player-score questions are mixed into the pool as 3 extra virtual slots (~25% of picks).
+ * When a player slot is selected but neither team has a mapped star player, falls back
+ * to a regular pool question. All selections are deterministic per matchId.
  */
 export function getBonusQuestion(
   matchId: string,
@@ -71,25 +71,31 @@ export function getBonusQuestion(
     .split("")
     .reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
 
-  const candidates: StarPlayer[] = [];
-  for (const team of [homeTeam, awayTeam]) {
-    if (team && WORLD_CUP_STAR_PLAYERS[team]) {
-      candidates.push(WORLD_CUP_STAR_PLAYERS[team]);
+  // Virtual pool: 9 static slots + 3 player slots = 12 total → ~25% player questions
+  const PLAYER_SLOTS = 3;
+  const idx = hash % (BONUS_QUESTION_POOL.length + PLAYER_SLOTS);
+
+  if (idx >= BONUS_QUESTION_POOL.length) {
+    // Player question slot — use it if a star player is available for this match
+    const candidates: StarPlayer[] = [];
+    for (const team of [homeTeam, awayTeam]) {
+      if (team && WORLD_CUP_STAR_PLAYERS[team]) candidates.push(WORLD_CUP_STAR_PLAYERS[team]);
     }
+    if (candidates.length > 0) {
+      const player = candidates[hash % candidates.length];
+      return {
+        type: "player_scores",
+        text: `האם ${player.hebrewName} יבקיע במשחק?`,
+        points: 1,
+        tag: "⭐",
+        playerName: player.displayName,
+      };
+    }
+    // No star player for this match → fall back to a regular pool question
+    return BONUS_QUESTION_POOL[hash % BONUS_QUESTION_POOL.length];
   }
 
-  if (candidates.length > 0) {
-    const player = candidates[hash % candidates.length];
-    return {
-      type: "player_scores",
-      text: `האם ${player.hebrewName} יבקיע במשחק?`,
-      points: 1,
-      tag: "⭐",
-      playerName: player.displayName,
-    };
-  }
-
-  return BONUS_QUESTION_POOL[hash % BONUS_QUESTION_POOL.length];
+  return BONUS_QUESTION_POOL[idx];
 }
 
 // ─── ESPN detail type ──────────────────────────────────────────────────────────
