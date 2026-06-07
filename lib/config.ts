@@ -3,8 +3,16 @@
  * ─────────────────────────────────────────────
  * Change `active` to switch the competition the app runs on.
  *
- *   'premier_league'  → Premier League (for testing)
- *   'world_cup_2026'  → FIFA World Cup 2026 (June 11 – July 19 2026)
+ *   'premier_league'         → Premier League (for testing)
+ *   'international_friendlies' → Pre-tournament friendlies (for testing)
+ *   'world_cup_2026'         → FIFA World Cup 2026
+ *
+ * World Cup date ranges by stage (update dateRange as each stage begins):
+ *   Group stage   → 20260611-20260627
+ *   Round of 16   → 20260611-20260702
+ *   Quarterfinals → 20260611-20260705
+ *   Semifinals    → 20260611-20260710
+ *   Final         → 20260611-20260719
  */
 
 export type CompetitionKey = "premier_league" | "world_cup_2026" | "international_friendlies";
@@ -32,7 +40,7 @@ export const COMPETITIONS: Record<CompetitionKey, CompetitionConfig> = {
   world_cup_2026: {
     name: "FIFA World Cup 2026",
     espnSlug: "fifa.world",
-    dateRange: "20260611-20260719",
+    dateRange: "20260611-20260627", // group stage — extend for each knockout round
     label: "מונדיאל 2026",
     icon: "🌍",
   },
@@ -46,7 +54,7 @@ export const COMPETITIONS: Record<CompetitionKey, CompetitionConfig> = {
 };
 
 // ─── CHANGE THIS LINE TO SWITCH COMPETITION ───────────────────────────────────
-export const ACTIVE_COMPETITION: CompetitionKey = "international_friendlies";
+export const ACTIVE_COMPETITION: CompetitionKey = "world_cup_2026";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const activeConfig = COMPETITIONS[ACTIVE_COMPETITION];
