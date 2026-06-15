@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MatchCard } from "@/components/MatchCard";
 import { MatchCardSkeleton } from "@/components/MatchCardSkeleton";
 import { HistoryTab } from "@/components/HistoryTab";
+import { CommunityTab, type CompletedMatch } from "@/components/CommunityTab";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 
 interface RealMatch {
@@ -21,6 +22,9 @@ interface RealMatch {
   startTime: string; matchDate: string;
   rawStartTime: string;
   isLocked: boolean;
+  isCompleted: boolean;
+  finalHomeScore: number | null;
+  finalAwayScore: number | null;
 }
 
 async function triggerAutoSync() {
@@ -47,7 +51,7 @@ export default function Dashboard() {
   const [loadingUser, setLoadingUser]   = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [filter, setFilter]       = useState<FilterKey>("all");
-  const [tab, setTab]             = useState<"matches" | "leaderboard" | "history">("matches");
+  const [tab, setTab]             = useState<"matches" | "leaderboard" | "history" | "community">("matches");
   const router = useRouter();
 
   // Auth + real-time user data + real-time leaderboard
@@ -92,6 +96,7 @@ export default function Dashboard() {
             const home = comp.competitors.find((c: any) => c.homeAway === "home");
             const away = comp.competitors.find((c: any) => c.homeAway === "away");
             const d = new Date(e.date);
+            const completed = e.status?.type?.completed === true;
             return {
               id: e.id,
               homeTeam: home.team.displayName, homeLogo: home.team.logo ?? "",
@@ -100,6 +105,9 @@ export default function Dashboard() {
               matchDate: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
               rawStartTime: e.date,
               isLocked: d.getTime() - Date.now() <= 15 * 60 * 1000,
+              isCompleted: completed,
+              finalHomeScore: completed ? parseInt(home.score ?? "0", 10) : null,
+              finalAwayScore: completed ? parseInt(away.score ?? "0", 10) : null,
             };
           }));
         }
@@ -110,6 +118,17 @@ export default function Dashboard() {
   }, []);
 
   const today = todayStr();
+  const completedMatches: CompletedMatch[] = matches
+    .filter((m) => m.isCompleted && m.finalHomeScore !== null)
+    .map((m) => ({
+      id: m.id,
+      homeTeam: m.homeTeam, homeLogo: m.homeLogo,
+      awayTeam: m.awayTeam, awayLogo: m.awayLogo,
+      finalHomeScore: m.finalHomeScore as number,
+      finalAwayScore: m.finalAwayScore as number,
+      startTime: m.startTime,
+    }));
+
   const filtered = matches.filter((m) => {
     if (filter === "open")   return !m.isLocked;
     if (filter === "locked") return m.isLocked;
@@ -211,14 +230,15 @@ export default function Dashboard() {
         </header>
 
         {/* ══ TAB SWITCHER ════════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-3 bg-[#0A1020]/90 border border-white/6 rounded-2xl p-1 gap-1">
+        <div className="grid grid-cols-4 bg-[#0A1020]/90 border border-white/6 rounded-2xl p-1 gap-1">
           {([
             { key: "matches",     label: "⚽ ניחושים",  active: "bg-emerald-600 shadow-emerald-600/25" },
             { key: "leaderboard", label: "🏆 דירוג",    active: "bg-amber-500 shadow-amber-500/25" },
             { key: "history",     label: "📋 היסטוריה", active: "bg-blue-600 shadow-blue-600/25" },
+            { key: "community",   label: "👥 השוואה",   active: "bg-purple-600 shadow-purple-600/25" },
           ] as const).map(({ key, label, active }) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`py-2.5 rounded-xl text-xs font-black tracking-wide transition-all duration-200 ${
+              className={`py-2.5 rounded-xl text-[10px] font-black tracking-wide transition-all duration-200 ${
                 tab === key
                   ? `${active} text-white shadow-md`
                   : "text-slate-600 hover:text-slate-300"
@@ -282,6 +302,23 @@ export default function Dashboard() {
         {/* ══ HISTORY ═════════════════════════════════════════════════════════ */}
         {tab === "history" && user?.id && (
           <HistoryTab userId={user.id} />
+        )}
+
+        {/* ══ COMMUNITY ════════════════════════════════════════════════════════ */}
+        {tab === "community" && user?.id && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-black text-white">ניחושי כולם</h2>
+              <p className="text-xs text-slate-700 font-medium mt-0.5">
+                בחר משחק שהסתיים כדי לראות את ניחושי כל השחקנים
+              </p>
+            </div>
+            <CommunityTab
+              currentUserId={user.id}
+              completedMatches={completedMatches}
+              leaderboard={leaderboard}
+            />
+          </section>
         )}
 
         {/* ══ LEADERBOARD ═════════════════════════════════════════════════════ */}
