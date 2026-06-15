@@ -112,7 +112,24 @@ export interface ESPNDetail {
 
 // Strips accents and lowercases for resilient name matching
 function normalize(s: string): string {
+  // eslint-disable-next-line no-misleading-character-class
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Checks whether an ESPN athlete display name refers to the same person as our
+// stored target name. Applies to ALL player_scores questions (every player in the
+// star-player map). Uses three strategies so edge cases like "Vinicius Jr." vs
+// "Vinicius Junior", "K. Havertz" vs "Kai Havertz", or accented "Vinícius" all match.
+function playerNameMatches(espnRaw: string, targetRaw: string): boolean {
+  const espn   = normalize(espnRaw);
+  const target = normalize(targetRaw);
+  // 1. One name fully contains the other
+  if (espn.includes(target) || target.includes(espn)) return true;
+  // 2. Word-level: any significant word (≥4 chars, not a common suffix) from the
+  //    target appears inside the ESPN name — catches "Havertz", "Isak", "Vinicius"
+  const SUFFIXES = new Set(["jr.", "jr", "junior", "senior", "sr.", "sr"]);
+  const words = target.split(/\s+/).filter(w => w.length >= 4 && !SUFFIXES.has(w));
+  return words.some(w => espn.includes(w));
 }
 
 /**
@@ -121,8 +138,8 @@ function normalize(s: string): string {
  */
 export function detectBonusAnswer(
   bonusQ: BonusQuestion,
-  homeScore: number,
-  awayScore: number,
+  _homeScore: number,
+  _awayScore: number,
   details: ESPNDetail[]
 ): boolean | null {
   switch (bonusQ.type) {
@@ -241,14 +258,16 @@ export function detectBonusAnswer(
     case "player_scores": {
       if (!details.length || !bonusQ.playerName) return null;
       const GOAL_ABBRS = new Set(["G", "PG"]);
-      const targetName = normalize(bonusQ.playerName);
       return details.some((d) => {
-        if (!GOAL_ABBRS.has(d.type?.abbreviation?.toUpperCase() ?? "")) return false;
-        return (d.athletesInvolved ?? []).some((a) => {
-          const espnName = normalize(a.displayName ?? "");
-          // Match if either name contains the other (handles "Vinicius Jr." vs "Vinicius Junior")
-          return espnName.includes(targetName) || targetName.includes(espnName);
-        });
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        // Accept ESPN abbreviation OR text fallback (e.g. "Goal Scored", "goal")
+        const isGoal = GOAL_ABBRS.has(abbr) ||
+          (text.includes("goal") && !text.includes("own goal") && !text.includes("no goal"));
+        if (!isGoal) return false;
+        return (d.athletesInvolved ?? []).some((a) =>
+          playerNameMatches(a.displayName ?? "", bonusQ.playerName!)
+        );
       });
     }
 

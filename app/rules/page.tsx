@@ -127,7 +127,7 @@ export default function RulesPage() {
                 </div>
               ))}
               <div className="col-span-2 flex items-center justify-between bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2">
-                <span className="font-black text-emerald-300 text-sm">15 נק׳</span>
+                <span className="font-black text-emerald-300 text-sm">13 נק׳</span>
               </div>
             </div>
           </div>

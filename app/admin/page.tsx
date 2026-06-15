@@ -7,6 +7,7 @@ import {
   deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
+import { getBonusQuestion, detectBonusAnswer, ESPNDetail } from "@/lib/bonusQuestions";
 
 export default function AdminPage() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -14,6 +15,7 @@ export default function AdminPage() {
   const [done, setDone] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [isRescoring, setIsRescoring] = useState(false);
 
   const addLog = (msg: string) => setSyncLogs((prev) => [msg, ...prev]);
 
@@ -54,6 +56,86 @@ export default function AdminPage() {
       addLog(`❌ שגיאה: ${err.message}`);
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  // Re-scores ONLY the bonus question for already-scored predictions.
+  // Safe to run at any time: never touches main prediction points.
+  // Adjusts both directions (awards missed points + removes wrong points) for fairness.
+  const handleRescoreBonus = async () => {
+    setIsRescoring(true);
+    setSyncLogs([]);
+    addLog("טוען משחקים שהסתיימו מ-ESPN...");
+    try {
+      const response = await fetch(getEspnScoreboardUrl(), { cache: "no-store" });
+      const data = await response.json();
+      if (!data?.events) { addLog("❌ לא נמצאו נתונים."); return; }
+
+      const completed = data.events.filter((e: any) => e.status?.type?.completed === true);
+      addLog(`נמצאו ${completed.length} משחקים שהסתיימו.`);
+
+      let fixed = 0;
+      // Accumulate per-user point deltas before writing
+      const userDeltas: Record<string, number> = {};
+
+      for (const match of completed) {
+        const comp = match.competitions[0];
+        const homeComp = comp.competitors.find((c: any) => c.homeAway === "home");
+        const awayComp = comp.competitors.find((c: any) => c.homeAway === "away");
+        const details: ESPNDetail[] = comp.details ?? [];
+        const homeTeam: string = homeComp?.team?.displayName ?? "";
+        const awayTeam: string = awayComp?.team?.displayName ?? "";
+
+        const bonusQ      = getBonusQuestion(match.id, homeTeam, awayTeam);
+        const newDetection = detectBonusAnswer(
+          bonusQ,
+          parseInt(homeComp?.score ?? "0", 10),
+          parseInt(awayComp?.score ?? "0", 10),
+          details
+        );
+        if (newDetection === null) continue; // still undetectable — skip
+
+        const predsSnap = await getDocs(
+          query(collection(db, "Predictions"), where("matchId", "==", match.id))
+        );
+
+        for (const predDoc of predsSnap.docs) {
+          const pred = predDoc.data();
+          // Only re-score predictions that are already fully scored
+          if (pred.bonusPointsEarned === undefined) continue;
+          // Skip if user didn't answer the bonus question
+          if (pred.bonusAnswer === undefined || pred.bonusAnswer === null) continue;
+          // Skip if the stored detection already matches the new detection
+          if (pred.bonusCorrectAnswer === newDetection) continue;
+
+          const wasCorrect = pred.bonusAnswer === pred.bonusCorrectAnswer;
+          const nowCorrect = pred.bonusAnswer === newDetection;
+          const delta = (nowCorrect ? 1 : 0) - (wasCorrect ? 1 : 0);
+
+          if (delta === 0) continue; // no change in earned points
+
+          await updateDoc(predDoc.ref, {
+            bonusCorrectAnswer: newDetection,
+            bonusPointsEarned: nowCorrect ? 1 : 0,
+            bonusDetectionNote: "resynced",
+          });
+
+          userDeltas[pred.userId] = (userDeltas[pred.userId] ?? 0) + delta;
+          fixed++;
+          addLog(`${delta > 0 ? "+" : ""}${delta} נק׳ — ${pred.userId.slice(0, 6)}… (${bonusQ.text.slice(0, 30)})`);
+        }
+      }
+
+      // Apply all user point adjustments
+      for (const [userId, delta] of Object.entries(userDeltas)) {
+        await updateDoc(doc(db, "Users", userId), { totalPoints: increment(delta) });
+      }
+
+      addLog(`✅ סיום! ${fixed} ניחושי בונוס תוקנו עבור ${Object.keys(userDeltas).length} משתמשים.`);
+    } catch (err: any) {
+      addLog(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setIsRescoring(false);
     }
   };
 
@@ -202,6 +284,29 @@ export default function AdminPage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* Re-score bonus questions */}
+        <div className="bg-[#0E1520]/90 border border-blue-500/15 rounded-2xl p-5 shadow-xl space-y-3">
+          <p className="text-xs font-bold text-blue-400/80 text-center">
+            🔁 תיקון שאלות בונוס — מחשב מחדש בלי לאפס ניקוד ניחושים
+          </p>
+          <button
+            onClick={handleRescoreBonus}
+            disabled={isRescoring}
+            className={`w-full h-12 rounded-xl text-sm font-black transition-all duration-200 ${
+              isRescoring
+                ? "bg-blue-600/40 text-blue-300 cursor-wait"
+                : "bg-blue-800/40 hover:bg-blue-700/50 text-blue-300 border border-blue-500/20"
+            }`}
+          >
+            {isRescoring ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                מתקן בונוסים...
+              </span>
+            ) : "תקן שאלות בונוס לכל המשתתפים"}
+          </button>
         </div>
 
         {/* Reset data */}
