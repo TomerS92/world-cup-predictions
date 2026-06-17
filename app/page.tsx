@@ -2,41 +2,48 @@
 
 import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true); // true while checking redirect result on mount
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // After Google redirects back, pick up the result here
   useEffect(() => {
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          // Only creates the doc for brand-new users — existing scores are never touched
-          const userRef = doc(db, "Users", result.user.uid);
+    // Fires for already-logged-in users AND for users returning from signInWithRedirect
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Only creates doc for brand-new users — existing scores are never touched
+          const userRef = doc(db, "Users", firebaseUser.uid);
           if (!(await getDoc(userRef)).exists()) {
             await setDoc(userRef, {
-              displayName: result.user.displayName,
-              photoURL: result.user.photoURL,
-              email: result.user.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              email: firebaseUser.email,
               totalPoints: 0,
               streakCount: 0,
               joinedAt: new Date(),
             });
           }
           router.push("/dashboard");
-        } else {
+        } catch (err: any) {
           setLoading(false);
+          setError(`שגיאה ביצירת פרופיל — ${err?.code ?? "נסה שוב"}`);
         }
-      })
-      .catch((err) => {
+      } else {
         setLoading(false);
-        setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
-      });
+      }
+    });
+
+    // Capture any error that came back from the redirect flow
+    getRedirectResult(auth).catch((err) => {
+      setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
+    });
+
+    return () => unsub();
   }, [router]);
 
   const handleLogin = async () => {
@@ -45,7 +52,6 @@ export default function Home() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithRedirect(auth, provider);
-      // browser navigates to Google — nothing below runs
     } catch (err: any) {
       setLoading(false);
       setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
