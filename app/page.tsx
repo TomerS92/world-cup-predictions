@@ -1,40 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // true while checking redirect result on mount
   const [error, setError] = useState<string | null>(null);
+
+  // After Google redirects back, pick up the result here
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          // Only creates the doc for brand-new users — existing scores are never touched
+          const userRef = doc(db, "Users", result.user.uid);
+          if (!(await getDoc(userRef)).exists()) {
+            await setDoc(userRef, {
+              displayName: result.user.displayName,
+              photoURL: result.user.photoURL,
+              email: result.user.email,
+              totalPoints: 0,
+              streakCount: 0,
+              joinedAt: new Date(),
+            });
+          }
+          router.push("/dashboard");
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        setLoading(false);
+        setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
+      });
+  }, [router]);
 
   const handleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const userRef = doc(db, "Users", result.user.uid);
-      if (!(await getDoc(userRef)).exists()) {
-        await setDoc(userRef, {
-          displayName: result.user.displayName,
-          photoURL: result.user.photoURL,
-          email: result.user.email,
-          totalPoints: 0,
-          streakCount: 0,
-          joinedAt: new Date(),
-        });
-      }
-      router.push("/dashboard");
+      await signInWithRedirect(auth, provider);
+      // browser navigates to Google — nothing below runs
     } catch (err: any) {
-      if (err?.code !== "auth/popup-closed-by-user") {
-        setError("שגיאה בהתחברות — נסה שוב.");
-      }
-    } finally {
       setLoading(false);
+      setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
     }
   };
 
