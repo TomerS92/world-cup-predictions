@@ -7,6 +7,7 @@ export type BonusQuestionType =
   | "double_yellow_red"
   | "four_plus_yellows"
   | "penalty_or_red"
+  | "two_plus_yellows"
   | "defender_scores"
   | "player_scores";
 
@@ -29,7 +30,7 @@ export const BONUS_QUESTION_POOL: BonusQuestion[] = [
   { type: "double_yellow_red", text: "האם שחקן כלשהו יגורש בשל שני כרטיסים צהובים?",           points: 1, tag: "🟡🟥" },
   { type: "four_plus_yellows", text: "האם יחולקו לפחות 4 כרטיסים צהובים במשחק?",               points: 1, tag: "🟨🟨" },
   { type: "penalty_or_red",    text: "האם יהיה לפחות אירוע דרמטי אחד — פנדל או כרטיס אדום?", points: 1, tag: "⚡"   },
-  { type: "defender_scores",   text: "האם מגן יבקיע במשחק?",                                   points: 1, tag: "🛡️"  },
+  { type: "two_plus_yellows",  text: "האם יוצגו לפחות 2 כרטיסים צהובים במשחק?",               points: 1, tag: "🟡"  },
 ];
 
 // ─── World Cup 2026 star players — keyed by ESPN team display name ─────────────
@@ -230,29 +231,37 @@ export function detectBonusAnswer(
       });
     }
 
+    case "two_plus_yellows": {
+      if (!details.length) return null;
+      const count = details.filter((d) => {
+        const abbr = d.type?.abbreviation?.toUpperCase() ?? "";
+        const text = d.type?.text?.toLowerCase() ?? "";
+        return abbr === "YC" || text === "yellow card";
+      }).length;
+      return count >= 2;
+    }
+
     case "defender_scores": {
+      // Question removed from pool — only appears in matches already assigned it.
+      // ESPN rarely provides position data in detail events, so detection is unreliable.
+      // Use the admin "Fix defender question" button to resolve these manually.
       if (!details.length) return null;
       const GOAL_ABBRS = new Set(["G", "PG"]);
       const goalEvents = details.filter((d) =>
         GOAL_ABBRS.has(d.type?.abbreviation?.toUpperCase() ?? "")
       );
       if (!goalEvents.length) return false;
-
       const DEFENDER_TERMS = ["defender", "back", "cb", "lb", "rb", "df", "centre back", "center back", "full back", "fullback"];
-      let hasPositionData = false;
-
       for (const goal of goalEvents) {
         for (const athlete of (goal.athletesInvolved ?? [])) {
           const posName = (athlete.position?.name ?? "").toLowerCase();
           const posAbbr = (athlete.position?.abbreviation ?? "").toLowerCase();
-          if (posName || posAbbr) hasPositionData = true;
           if (DEFENDER_TERMS.some((t) => posName.includes(t)) || posAbbr === "df" || posAbbr === "d") {
             return true;
           }
         }
       }
-      // If ESPN provided position data but no defender scored → false. If no position data → null.
-      return hasPositionData ? false : null;
+      return null; // undetectable without position data
     }
 
     case "player_scores": {

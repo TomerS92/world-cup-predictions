@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [isResetting, setIsResetting] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [isRescoring, setIsRescoring] = useState(false);
+  const [isFixingDefender, setIsFixingDefender] = useState(false);
 
   const addLog = (msg: string) => setSyncLogs((prev) => [msg, ...prev]);
 
@@ -105,6 +106,8 @@ export default function AdminPage() {
           if (pred.bonusPointsEarned === undefined) continue;
           // Skip if user didn't answer the bonus question
           if (pred.bonusAnswer === undefined || pred.bonusAnswer === null) continue;
+          // Skip matches that were manually resolved via the defender fix button
+          if (pred.bonusDetectionNote === "admin_manual_defender") continue;
           // Skip if the stored detection already matches the new detection
           if (pred.bonusCorrectAnswer === newDetection) continue;
 
@@ -136,6 +139,73 @@ export default function AdminPage() {
       addLog(`❌ שגיאה: ${err.message}`);
     } finally {
       setIsRescoring(false);
+    }
+  };
+
+  // Manually resolves all "defender_scores" bonus questions as false (no defender scored).
+  // Uses the same hash logic that originally assigned the question, so it works even
+  // after the pool was updated to replace defender_scores with two_plus_yellows.
+  const handleFixDefenderScores = async () => {
+    setIsFixingDefender(true);
+    setSyncLogs([]);
+    addLog("מחפש משחקים עם שאלת 'מגן יבקיע'...");
+    try {
+      const response = await fetch(getEspnScoreboardUrl(), { cache: "no-store" });
+      const data = await response.json();
+      if (!data?.events) { addLog("❌ לא נמצאו נתונים."); return; }
+
+      const completed = data.events.filter((e: any) => e.status?.type?.completed === true);
+      const userDeltas: Record<string, number> = {};
+      let fixed = 0;
+
+      for (const match of completed) {
+        // Replicate the original hash logic: pool was 9 entries + 3 player slots = 12
+        // defender_scores was at index 8 → matches where hash % 12 === 8
+        const hash = (match.id as string)
+          .split("").reduce((acc: number, ch: string, i: number) => acc + ch.charCodeAt(0) * (i + 1), 0);
+        if (hash % 12 !== 8) continue;
+
+        const homeTeam = match.competitions[0].competitors.find((c: any) => c.homeAway === "home")?.team?.displayName ?? "";
+        const awayTeam = match.competitions[0].competitors.find((c: any) => c.homeAway === "away")?.team?.displayName ?? "";
+        addLog(`נמצא: ${homeTeam} נגד ${awayTeam}`);
+
+        const predsSnap = await getDocs(
+          query(collection(db, "Predictions"), where("matchId", "==", match.id))
+        );
+
+        for (const predDoc of predsSnap.docs) {
+          const pred = predDoc.data();
+          if (pred.bonusAnswer === undefined || pred.bonusAnswer === null) continue;
+          if (pred.bonusDetectionNote === "admin_manual_defender") continue; // already fixed
+
+          const nowCorrect = pred.bonusAnswer === false; // correct answer: no defender scored
+          const wasPts = pred.bonusPointsEarned ?? 0;
+          const nowPts = nowCorrect ? 1 : 0;
+          const delta = nowPts - wasPts;
+
+          await updateDoc(predDoc.ref, {
+            bonusCorrectAnswer: false,
+            bonusPointsEarned: nowPts,
+            bonusDetectionNote: "admin_manual_defender",
+          });
+
+          if (delta !== 0) {
+            userDeltas[pred.userId] = (userDeltas[pred.userId] ?? 0) + delta;
+            addLog(`${delta > 0 ? "+" : ""}${delta} נק׳ — ${pred.userId.slice(0, 6)}…`);
+          }
+          fixed++;
+        }
+      }
+
+      for (const [userId, delta] of Object.entries(userDeltas)) {
+        await updateDoc(doc(db, "Users", userId), { totalPoints: increment(delta) });
+      }
+
+      addLog(`✅ סיום! ${fixed} ניחושים תוקנו (תשובה נכונה: לא).`);
+    } catch (err: any) {
+      addLog(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setIsFixingDefender(false);
     }
   };
 
@@ -284,6 +354,29 @@ export default function AdminPage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* Fix defender_scores matches */}
+        <div className="bg-[#0E1520]/90 border border-orange-500/15 rounded-2xl p-5 shadow-xl space-y-3">
+          <p className="text-xs font-bold text-orange-400/80 text-center">
+            🛡️ תיקון שאלת "מגן יבקיע" — קובע תשובה נכונה: לא (בכל המשחקים עם שאלה זו)
+          </p>
+          <button
+            onClick={handleFixDefenderScores}
+            disabled={isFixingDefender}
+            className={`w-full h-12 rounded-xl text-sm font-black transition-all duration-200 ${
+              isFixingDefender
+                ? "bg-orange-600/40 text-orange-300 cursor-wait"
+                : "bg-orange-900/40 hover:bg-orange-800/50 text-orange-300 border border-orange-500/20"
+            }`}
+          >
+            {isFixingDefender ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-orange-400/40 border-t-orange-400 rounded-full animate-spin" />
+                מתקן...
+              </span>
+            ) : "תקן שאלת מגן יבקיע לכל המשתתפים"}
+          </button>
         </div>
 
         {/* Re-score bonus questions */}
