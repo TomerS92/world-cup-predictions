@@ -15,8 +15,9 @@ export default function Home() {
     // Fires for already-logged-in users AND for users returning from signInWithRedirect
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Try to create the Firestore doc for new users, but never block navigation on failure.
+        // (Firestore rules errors must not prevent an authenticated user from reaching the app.)
         try {
-          // Only creates doc for brand-new users — existing scores are never touched
           const userRef = doc(db, "Users", firebaseUser.uid);
           if (!(await getDoc(userRef)).exists()) {
             await setDoc(userRef, {
@@ -28,17 +29,16 @@ export default function Home() {
               joinedAt: new Date(),
             });
           }
-          router.push("/dashboard");
-        } catch (err: any) {
-          setLoading(false);
-          setError(`שגיאה ביצירת פרופיל — ${err?.code ?? "נסה שוב"}`);
+        } catch {
+          // Firestore rules may be expired — user is still authenticated, proceed to dashboard
         }
+        router.push("/dashboard");
       } else {
         setLoading(false);
       }
     });
 
-    // Capture any error that came back from the redirect flow
+    // Capture any error from the redirect flow
     getRedirectResult(auth).catch((err) => {
       setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
     });
