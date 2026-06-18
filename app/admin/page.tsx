@@ -7,7 +7,7 @@ import {
   deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
-import { getBonusQuestion, detectBonusAnswer, ESPNDetail } from "@/lib/bonusQuestions";
+import { getBonusQuestion, detectBonusAnswer, ESPNDetail, type BonusQuestion } from "@/lib/bonusQuestions";
 
 export default function AdminPage() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -17,6 +17,14 @@ export default function AdminPage() {
   const [resetConfirm, setResetConfirm] = useState(false);
   const [isRescoring, setIsRescoring] = useState(false);
   const [isFixingDefender, setIsFixingDefender] = useState(false);
+
+  interface UnresolvedMatch {
+    id: string; homeTeam: string; awayTeam: string;
+    bonusQ: BonusQuestion; pendingCount: number;
+  }
+  const [unresolvedMatches, setUnresolvedMatches] = useState<UnresolvedMatch[]>([]);
+  const [loadingUnresolved, setLoadingUnresolved] = useState(false);
+  const [applyingMatchId, setApplyingMatchId] = useState<string | null>(null);
 
   const addLog = (msg: string) => setSyncLogs((prev) => [msg, ...prev]);
 
@@ -209,6 +217,67 @@ export default function AdminPage() {
     }
   };
 
+  const loadUnresolvedMatches = async () => {
+    setLoadingUnresolved(true);
+    setUnresolvedMatches([]);
+    try {
+      const data = await (await fetch(getEspnScoreboardUrl(), { cache: "no-store" })).json();
+      if (!data?.events) return;
+      const completed = data.events.filter((e: any) => e.status?.type?.completed === true);
+      const results: UnresolvedMatch[] = [];
+      for (const match of completed) {
+        const comp = match.competitions[0];
+        const homeTeam = comp.competitors.find((c: any) => c.homeAway === "home")?.team?.displayName ?? "";
+        const awayTeam = comp.competitors.find((c: any) => c.homeAway === "away")?.team?.displayName ?? "";
+        const bonusQ = getBonusQuestion(match.id, homeTeam, awayTeam);
+        const snap = await getDocs(query(collection(db, "Predictions"), where("matchId", "==", match.id)));
+        const pending = snap.docs.filter(d => {
+          const p = d.data();
+          return p.bonusCorrectAnswer === null && p.bonusAnswer !== null && p.bonusAnswer !== undefined;
+        });
+        if (pending.length > 0) {
+          results.push({ id: match.id, homeTeam, awayTeam, bonusQ, pendingCount: pending.length });
+        }
+      }
+      setUnresolvedMatches(results);
+    } catch (err: any) {
+      addLog(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setLoadingUnresolved(false);
+    }
+  };
+
+  const applyBonusAnswer = async (matchId: string, answer: boolean) => {
+    setApplyingMatchId(matchId);
+    try {
+      const snap = await getDocs(query(collection(db, "Predictions"), where("matchId", "==", matchId)));
+      const userDeltas: Record<string, number> = {};
+      for (const predDoc of snap.docs) {
+        const pred = predDoc.data();
+        if (pred.bonusCorrectAnswer !== null) continue;
+        if (pred.bonusAnswer === null || pred.bonusAnswer === undefined) continue;
+        const nowCorrect = pred.bonusAnswer === answer;
+        const wasPts = pred.bonusPointsEarned ?? 0;
+        const nowPts = nowCorrect ? 1 : 0;
+        const delta = nowPts - wasPts;
+        await updateDoc(predDoc.ref, {
+          bonusCorrectAnswer: answer,
+          bonusPointsEarned: nowPts,
+          bonusDetectionNote: "admin_manual",
+        });
+        if (delta !== 0) userDeltas[pred.userId] = (userDeltas[pred.userId] ?? 0) + delta;
+      }
+      for (const [uid, delta] of Object.entries(userDeltas)) {
+        await updateDoc(doc(db, "Users", uid), { totalPoints: increment(delta) });
+      }
+      setUnresolvedMatches(prev => prev.filter(m => m.id !== matchId));
+    } catch (err: any) {
+      addLog(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setApplyingMatchId(null);
+    }
+  };
+
   const handleSync = async () => {
     setIsSyncing(true);
     setDone(false);
@@ -354,6 +423,63 @@ export default function AdminPage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* Manual bonus override */}
+        <div className="bg-[#0E1520]/90 border border-yellow-500/15 rounded-2xl p-5 shadow-xl space-y-3">
+          <p className="text-xs font-bold text-yellow-400/80 text-center">
+            ✍️ תיקון ידני של בונוסים — קבע תשובה נכונה למשחקים שלא חושבו
+          </p>
+          <button
+            onClick={loadUnresolvedMatches}
+            disabled={loadingUnresolved}
+            className={`w-full h-12 rounded-xl text-sm font-black transition-all duration-200 ${
+              loadingUnresolved
+                ? "bg-yellow-600/40 text-yellow-300 cursor-wait"
+                : "bg-yellow-900/40 hover:bg-yellow-800/50 text-yellow-300 border border-yellow-500/20"
+            }`}
+          >
+            {loadingUnresolved ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-yellow-400/40 border-t-yellow-400 rounded-full animate-spin" />
+                טוען...
+              </span>
+            ) : "טען משחקים עם בונוס לא פתור"}
+          </button>
+
+          {unresolvedMatches.length === 0 && !loadingUnresolved && (
+            <p className="text-center text-xs text-slate-700">לחץ לטעינה</p>
+          )}
+
+          {unresolvedMatches.map(m => (
+            <div key={m.id} className="bg-white/3 border border-white/8 rounded-xl p-4 space-y-3">
+              <div className="text-center">
+                <p className="text-sm font-black text-white">{m.homeTeam} נגד {m.awayTeam}</p>
+                <p className="text-xs text-yellow-300 mt-1">{m.bonusQ.tag} {m.bonusQ.text}</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">{m.pendingCount} ניחושים ממתינים</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => applyBonusAnswer(m.id, true)}
+                  disabled={applyingMatchId === m.id}
+                  className="h-10 rounded-xl text-sm font-black bg-emerald-700/40 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/20 disabled:opacity-40 disabled:cursor-wait transition-all"
+                >
+                  {applyingMatchId === m.id ? "..." : "✓ כן"}
+                </button>
+                <button
+                  onClick={() => applyBonusAnswer(m.id, false)}
+                  disabled={applyingMatchId === m.id}
+                  className="h-10 rounded-xl text-sm font-black bg-red-700/40 hover:bg-red-600/50 text-red-300 border border-red-500/20 disabled:opacity-40 disabled:cursor-wait transition-all"
+                >
+                  {applyingMatchId === m.id ? "..." : "✗ לא"}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {unresolvedMatches.length === 0 && !loadingUnresolved && (
+            <p className="text-center text-[10px] text-slate-700">כל הבונוסים מחושבים ✓</p>
+          )}
         </div>
 
         {/* Fix defender_scores matches */}
