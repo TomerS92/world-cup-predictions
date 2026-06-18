@@ -21,6 +21,7 @@ export default function AdminPage() {
   interface UnresolvedMatch {
     id: string; homeTeam: string; awayTeam: string;
     bonusQ: BonusQuestion; pendingCount: number;
+    currentAnswer: boolean | null;
   }
   const [unresolvedMatches, setUnresolvedMatches] = useState<UnresolvedMatch[]>([]);
   const [loadingUnresolved, setLoadingUnresolved] = useState(false);
@@ -230,13 +231,15 @@ export default function AdminPage() {
         const homeTeam = comp.competitors.find((c: any) => c.homeAway === "home")?.team?.displayName ?? "";
         const awayTeam = comp.competitors.find((c: any) => c.homeAway === "away")?.team?.displayName ?? "";
         const bonusQ = getBonusQuestion(match.id, homeTeam, awayTeam);
+        // Find any prediction to read the current bonusCorrectAnswer
         const snap = await getDocs(query(collection(db, "Predictions"), where("matchId", "==", match.id)));
-        const pending = snap.docs.filter(d => {
+        const withAnswer = snap.docs.filter(d => {
           const p = d.data();
-          return p.bonusCorrectAnswer === null && p.bonusAnswer !== null && p.bonusAnswer !== undefined;
+          return p.bonusAnswer !== null && p.bonusAnswer !== undefined;
         });
-        if (pending.length > 0) {
-          results.push({ id: match.id, homeTeam, awayTeam, bonusQ, pendingCount: pending.length });
+        if (withAnswer.length > 0) {
+          const currentAnswer: boolean | null = withAnswer[0].data().bonusCorrectAnswer ?? null;
+          results.push({ id: match.id, homeTeam, awayTeam, bonusQ, pendingCount: withAnswer.length, currentAnswer });
         }
       }
       setUnresolvedMatches(results);
@@ -247,6 +250,8 @@ export default function AdminPage() {
     }
   };
 
+  // Applies a bonus answer to all predictions for a match — works whether already set or not.
+  // Bidirectional: awards missed points AND removes wrong points.
   const applyBonusAnswer = async (matchId: string, answer: boolean) => {
     setApplyingMatchId(matchId);
     try {
@@ -254,8 +259,8 @@ export default function AdminPage() {
       const userDeltas: Record<string, number> = {};
       for (const predDoc of snap.docs) {
         const pred = predDoc.data();
-        if (pred.bonusCorrectAnswer !== null) continue;
         if (pred.bonusAnswer === null || pred.bonusAnswer === undefined) continue;
+        if (pred.bonusCorrectAnswer === answer) continue; // already correct — skip
         const nowCorrect = pred.bonusAnswer === answer;
         const wasPts = pred.bonusPointsEarned ?? 0;
         const nowPts = nowCorrect ? 1 : 0;
@@ -270,7 +275,8 @@ export default function AdminPage() {
       for (const [uid, delta] of Object.entries(userDeltas)) {
         await updateDoc(doc(db, "Users", uid), { totalPoints: increment(delta) });
       }
-      setUnresolvedMatches(prev => prev.filter(m => m.id !== matchId));
+      // Update displayed current answer without reloading
+      setUnresolvedMatches(prev => prev.map(m => m.id === matchId ? { ...m, currentAnswer: answer } : m));
     } catch (err: any) {
       addLog(`❌ שגיאה: ${err.message}`);
     } finally {
@@ -456,30 +462,41 @@ export default function AdminPage() {
               <div className="text-center">
                 <p className="text-sm font-black text-white">{m.homeTeam} נגד {m.awayTeam}</p>
                 <p className="text-xs text-yellow-300 mt-1">{m.bonusQ.tag} {m.bonusQ.text}</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">{m.pendingCount} ניחושים ממתינים</p>
+                <p className="text-[10px] mt-0.5">
+                  {m.currentAnswer === null
+                    ? <span className="text-slate-500">לא חושב עדיין · {m.pendingCount} שחקנים</span>
+                    : m.currentAnswer
+                    ? <span className="text-emerald-400">נוכחי: כן ✓ · {m.pendingCount} שחקנים</span>
+                    : <span className="text-red-400">נוכחי: לא ✗ · {m.pendingCount} שחקנים</span>
+                  }
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => applyBonusAnswer(m.id, true)}
                   disabled={applyingMatchId === m.id}
-                  className="h-10 rounded-xl text-sm font-black bg-emerald-700/40 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/20 disabled:opacity-40 disabled:cursor-wait transition-all"
+                  className={`h-10 rounded-xl text-sm font-black border transition-all disabled:opacity-40 disabled:cursor-wait ${
+                    m.currentAnswer === true
+                      ? "bg-emerald-600/60 text-emerald-200 border-emerald-500/40"
+                      : "bg-emerald-900/40 hover:bg-emerald-700/50 text-emerald-300 border-emerald-500/20"
+                  }`}
                 >
                   {applyingMatchId === m.id ? "..." : "✓ כן"}
                 </button>
                 <button
                   onClick={() => applyBonusAnswer(m.id, false)}
                   disabled={applyingMatchId === m.id}
-                  className="h-10 rounded-xl text-sm font-black bg-red-700/40 hover:bg-red-600/50 text-red-300 border border-red-500/20 disabled:opacity-40 disabled:cursor-wait transition-all"
+                  className={`h-10 rounded-xl text-sm font-black border transition-all disabled:opacity-40 disabled:cursor-wait ${
+                    m.currentAnswer === false
+                      ? "bg-red-600/60 text-red-200 border-red-500/40"
+                      : "bg-red-900/40 hover:bg-red-700/50 text-red-300 border-red-500/20"
+                  }`}
                 >
                   {applyingMatchId === m.id ? "..." : "✗ לא"}
                 </button>
               </div>
             </div>
           ))}
-
-          {unresolvedMatches.length === 0 && !loadingUnresolved && (
-            <p className="text-center text-[10px] text-slate-700">כל הבונוסים מחושבים ✓</p>
-          )}
         </div>
 
         {/* Fix defender_scores matches */}
