@@ -39,7 +39,6 @@ export function MatchCard({
   const [isJoker, setIsJoker]     = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
   const [hasPrediction, setHasPrediction] = useState(false);
-  const [extremeWarning, setExtremeWarning] = useState(false);
   const [msg, setMsg] = useState<InlineMsg>(null);
 
   // Scored results
@@ -127,12 +126,6 @@ export function MatchCard({
       return;
     }
     const h = Number(homeScore), a = Number(awayScore);
-    if ((Math.abs(h - a) >= 4 || h + a >= 7) && !extremeWarning) {
-      setExtremeWarning(true);
-      setMsg({ type: "warning", text: "תוצאה קיצונית — לחץ שוב לאישור." });
-      return;
-    }
-    setExtremeWarning(false);
 
     // Optimistic: update UI immediately before Firestore round-trip
     const prevHasPrediction = hasPrediction;
@@ -213,8 +206,8 @@ export function MatchCard({
             homeVal={homeScore}
             awayVal={awayScore}
             isLocked={isLocked}
-            onHomeChange={(v) => { setExtremeWarning(false); setHomeScore(v); }}
-            onAwayChange={(v) => { setExtremeWarning(false); setAwayScore(v); }}
+            onHomeChange={(v) => setHomeScore(v)}
+            onAwayChange={(v) => setAwayScore(v)}
           />
           <TeamCol name={awayTeam} logo={awayLogo} align="right" />
         </div>
