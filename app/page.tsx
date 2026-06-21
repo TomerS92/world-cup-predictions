@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged } from "firebase/auth";
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
@@ -49,10 +49,21 @@ export default function Home() {
   const handleLogin = async () => {
     setLoading(true);
     setError(null);
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      // Popup is instant and avoids cross-origin storage issues with redirect
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged above handles navigation after success
     } catch (err: any) {
+      if (err?.code === "auth/popup-closed-by-user") {
+        setLoading(false);
+        return;
+      }
+      if (err?.code === "auth/popup-blocked") {
+        // Popup blocked (common on mobile) — fall back to redirect
+        try { await signInWithRedirect(auth, provider); } catch { setLoading(false); }
+        return;
+      }
       setLoading(false);
       setError(`שגיאה בהתחברות — ${err?.code ?? "נסה שוב"}`);
     }

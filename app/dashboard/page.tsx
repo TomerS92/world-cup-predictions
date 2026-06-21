@@ -58,27 +58,34 @@ export default function Dashboard() {
   useEffect(() => {
     let unsubUser: (() => void) | null = null;
     let unsubBoard: (() => void) | null = null;
+    let unsubAuth: (() => void) | null = null;
 
-    const unsubAuth = onAuthStateChanged(auth, (cu) => {
-      if (!cu) { router.push("/"); return; }
+    // authStateReady() waits until Firebase has finished reading the persisted auth
+    // state from storage. Without it, onAuthStateChanged fires null immediately on
+    // page load (before IndexedDB is read) and the dashboard incorrectly redirects
+    // to "/" — creating a login ↔ dashboard loop.
+    auth.authStateReady().then(() => {
+      unsubAuth = onAuthStateChanged(auth, (cu) => {
+        if (!cu) { router.push("/"); return; }
 
-      // Live user document
-      unsubUser = onSnapshot(doc(db, "Users", cu.uid), (snap) => {
-        if (snap.exists()) setUser({ id: cu.uid, ...snap.data() });
-        setLoadingUser(false);
-      });
-
-      // Live leaderboard
-      try {
-        const q = query(collection(db, "Users"), orderBy("totalPoints", "desc"));
-        unsubBoard = onSnapshot(q, (snap) => {
-          setLeaderboard(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        // Live user document
+        unsubUser = onSnapshot(doc(db, "Users", cu.uid), (snap) => {
+          if (snap.exists()) setUser({ id: cu.uid, ...snap.data() });
+          setLoadingUser(false);
         });
-      } catch {}
+
+        // Live leaderboard
+        try {
+          const q = query(collection(db, "Users"), orderBy("totalPoints", "desc"));
+          unsubBoard = onSnapshot(q, (snap) => {
+            setLeaderboard(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          });
+        } catch {}
+      });
     });
 
     return () => {
-      unsubAuth();
+      unsubAuth?.();
       unsubUser?.();
       unsubBoard?.();
     };
