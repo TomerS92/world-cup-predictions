@@ -9,9 +9,10 @@
  *
  * World Cup date ranges by stage (update dateRange as each stage begins):
  *   Group stage   → 20260611-20260627
- *   Round of 16   → 20260611-20260702
- *   Quarterfinals → 20260611-20260705
- *   Semifinals    → 20260611-20260710
+ *   Round of 32   → 20260611-20260704
+ *   Round of 16   → 20260611-20260709
+ *   Quarterfinals → 20260611-20260712
+ *   Semifinals    → 20260611-20260716
  *   Final         → 20260611-20260719
  */
 
@@ -40,7 +41,7 @@ export const COMPETITIONS: Record<CompetitionKey, CompetitionConfig> = {
   world_cup_2026: {
     name: "FIFA World Cup 2026",
     espnSlug: "fifa.world",
-    dateRange: "20260611-20260627", // group stage — extend for each knockout round
+    dateRange: "20260611-20260704", // R32 — extend for each knockout round
     label: "מונדיאל 2026",
     icon: "🌍",
   },
