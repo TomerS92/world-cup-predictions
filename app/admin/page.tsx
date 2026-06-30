@@ -4,7 +4,7 @@ import { useState } from "react";
 import { db } from "@/lib/firebase";
 import {
   collection, query, where, getDocs, doc, updateDoc, increment, getDoc,
-  deleteDoc, writeBatch,
+  deleteDoc, writeBatch, setDoc,
 } from "firebase/firestore";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 import { getBonusQuestion, detectBonusAnswer, ESPNDetail, type BonusQuestion } from "@/lib/bonusQuestions";
@@ -26,6 +26,131 @@ export default function AdminPage() {
   const [unresolvedMatches, setUnresolvedMatches] = useState<UnresolvedMatch[]>([]);
   const [loadingUnresolved, setLoadingUnresolved] = useState(false);
   const [applyingMatchId, setApplyingMatchId] = useState<string | null>(null);
+
+  // ── Manual prediction entry ────────────────────────────────────────────────
+  interface ManualUser  { id: string; name: string; }
+  interface ManualMatch {
+    id: string; homeTeam: string; awayTeam: string;
+    homeScore: number; awayScore: number;
+    bonusCorrectAnswer: boolean | null;
+  }
+  const [manualUsers,   setManualUsers]   = useState<ManualUser[]>([]);
+  const [manualMatches, setManualMatches] = useState<ManualMatch[]>([]);
+  const [loadingManual, setLoadingManual] = useState(false);
+  const [selUserId,     setSelUserId]     = useState("");
+  const [selMatchId,    setSelMatchId]    = useState("");
+  const [manualHome,    setManualHome]    = useState("");
+  const [manualAway,    setManualAway]    = useState("");
+  const [manualJoker,   setManualJoker]   = useState(false);
+  const [manualBonus,   setManualBonus]   = useState<boolean | null>(null);
+  const [submitting,    setSubmitting]    = useState(false);
+  const [manualMsg,     setManualMsg]     = useState<string | null>(null);
+
+  const loadManualData = async () => {
+    setLoadingManual(true);
+    setManualMsg(null);
+    try {
+      const usersSnap = await getDocs(collection(db, "Users"));
+      setManualUsers(
+        usersSnap.docs.map(d => ({ id: d.id, name: d.data().displayName ?? d.id }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      const espnData = await (await fetch(getEspnScoreboardUrl(), { cache: "no-store" })).json();
+      const completed = (espnData.events ?? []).filter((e: any) => e.status?.type?.completed === true);
+      const list: ManualMatch[] = [];
+      for (const e of completed) {
+        const comp     = e.competitions[0];
+        const homeComp = comp.competitors.find((c: any) => c.homeAway === "home");
+        const awayComp = comp.competitors.find((c: any) => c.homeAway === "away");
+        const snap     = await getDocs(query(collection(db, "Predictions"), where("matchId", "==", e.id)));
+        const known    = snap.docs.find(d => d.data().bonusCorrectAnswer != null);
+        list.push({
+          id: e.id,
+          homeTeam:  homeComp?.team?.displayName ?? "?",
+          awayTeam:  awayComp?.team?.displayName ?? "?",
+          homeScore: parseInt(homeComp?.score ?? "0", 10),
+          awayScore: parseInt(awayComp?.score ?? "0", 10),
+          bonusCorrectAnswer: known ? known.data().bonusCorrectAnswer : null,
+        });
+      }
+      setManualMatches(list);
+    } catch (err: any) {
+      setManualMsg(`❌ שגיאה בטעינה: ${err.message}`);
+    } finally {
+      setLoadingManual(false);
+    }
+  };
+
+  const submitManualPrediction = async () => {
+    const predHome = parseInt(manualHome, 10);
+    const predAway = parseInt(manualAway, 10);
+    if (!selUserId || !selMatchId) { setManualMsg("❌ יש לבחור משתמש ומשחק"); return; }
+    if (isNaN(predHome) || isNaN(predAway) || predHome < 0 || predAway < 0) { setManualMsg("❌ ניקוד לא תקין"); return; }
+
+    const match = manualMatches.find(m => m.id === selMatchId);
+    if (!match) { setManualMsg("❌ משחק לא נמצא"); return; }
+
+    const predId = `${selUserId}_${selMatchId}`;
+    const existing = await getDoc(doc(db, "Predictions", predId));
+    if (existing.exists()) {
+      setManualMsg("⚠️ ניחוש כבר קיים למשתמש ומשחק אלו — לא ניתן לדרוס");
+      return;
+    }
+
+    setSubmitting(true);
+    setManualMsg(null);
+    try {
+      const { homeScore: rH, awayScore: rA, bonusCorrectAnswer } = match;
+      const isBullseye = predHome === rH && predAway === rA;
+      const isDiff     = predHome - predAway === rH - rA;
+      const isDir      = (predHome > predAway && rH > rA) ||
+                         (predHome < predAway && rH < rA) ||
+                         (predHome === predAway && rH === rA);
+
+      let basePoints = 0, extraPoints = 0;
+      const parts: string[] = [];
+      if (isBullseye)      { basePoints = 6; parts.push("תוצאה מדויקת (6 נק׳)"); }
+      else if (isDiff)     { basePoints = 3; parts.push("הפרש מדויק (3 נק׳)"); }
+      else if (isDir)      { basePoints = 2; parts.push("ניחשת את המנצח (2 נק׳)"); }
+      if (!isBullseye && (predHome === rH || predAway === rA)) {
+        extraPoints += 1; parts.push("פגיעה בשערי קבוצה (+1)");
+      }
+
+      let totalEarned = basePoints + extraPoints;
+      let breakdown   = parts.length ? parts.join(" + ") : "אין נקודות";
+      if (manualJoker) { totalEarned *= 2; breakdown = `🃏 ג'וקר: (${breakdown}) x2`; }
+
+      const bonusPointsEarned =
+        manualBonus !== null && bonusCorrectAnswer !== null
+          ? (manualBonus === bonusCorrectAnswer ? 1 : 0)
+          : 0;
+
+      await setDoc(doc(db, "Predictions", predId), {
+        userId: selUserId, matchId: selMatchId,
+        predictedHomeScore: predHome, predictedAwayScore: predAway,
+        isJoker: manualJoker,
+        bonusAnswer: manualBonus,
+        bonusCorrectAnswer: bonusCorrectAnswer ?? null,
+        bonusPointsEarned,
+        pointsEarned: totalEarned, pointsBreakdown: breakdown,
+        realHomeScore: rH, realAwayScore: rA,
+        adminEntered: true, createdAt: new Date(),
+      });
+
+      const totalToAdd = totalEarned + bonusPointsEarned;
+      if (totalToAdd > 0) {
+        await updateDoc(doc(db, "Users", selUserId), { totalPoints: increment(totalToAdd) });
+      }
+
+      const userName = manualUsers.find(u => u.id === selUserId)?.name ?? selUserId;
+      setManualMsg(`✅ נשמר! ${userName} קיבל ${totalToAdd} נק׳ — ${match.homeTeam} נגד ${match.awayTeam} (${predHome}:${predAway})`);
+      setSelUserId(""); setSelMatchId(""); setManualHome(""); setManualAway(""); setManualJoker(false); setManualBonus(null);
+    } catch (err: any) {
+      setManualMsg(`❌ שגיאה: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const addLog = (msg: string) => setSyncLogs((prev) => [msg, ...prev]);
 
@@ -543,6 +668,144 @@ export default function AdminPage() {
               </span>
             ) : "תקן שאלות בונוס לכל המשתתפים"}
           </button>
+        </div>
+
+        {/* Manual prediction entry */}
+        <div className="bg-[#0E1520]/90 border border-green-500/15 rounded-2xl p-5 shadow-xl space-y-3">
+          <p className="text-xs font-bold text-green-400/80 text-center">
+            📝 הוספת ניחוש ידני — עבור משתמש שלא הספיק להגיש
+          </p>
+
+          <button
+            onClick={loadManualData}
+            disabled={loadingManual}
+            className={`w-full h-12 rounded-xl text-sm font-black transition-all duration-200 ${
+              loadingManual
+                ? "bg-green-600/40 text-green-300 cursor-wait"
+                : "bg-green-900/40 hover:bg-green-800/50 text-green-300 border border-green-500/20"
+            }`}
+          >
+            {loadingManual ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-green-400/40 border-t-green-400 rounded-full animate-spin" />
+                טוען נתונים...
+              </span>
+            ) : manualUsers.length > 0 ? "טעון מחדש" : "טען משתמשים ומשחקים"}
+          </button>
+
+          {manualUsers.length > 0 && (
+            <div className="space-y-3">
+              {/* User picker */}
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-500 font-bold">משתמש</p>
+                <select
+                  value={selUserId}
+                  onChange={e => setSelUserId(e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-sm text-white appearance-none outline-none focus:border-green-500/40"
+                >
+                  <option value="">— בחר משתמש —</option>
+                  {manualUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Match picker */}
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-500 font-bold">משחק</p>
+                <select
+                  value={selMatchId}
+                  onChange={e => setSelMatchId(e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-sm text-white appearance-none outline-none focus:border-green-500/40"
+                >
+                  <option value="">— בחר משחק —</option>
+                  {manualMatches.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.homeTeam} {m.homeScore}:{m.awayScore} {m.awayTeam}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Score input */}
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-500 font-bold">ניחוש תוצאה</p>
+                <div className="grid grid-cols-3 items-center gap-2">
+                  <input
+                    type="number" min="0" max="20" placeholder="0"
+                    value={manualHome}
+                    onChange={e => setManualHome(e.target.value)}
+                    className="bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-center text-lg font-black text-white outline-none focus:border-green-500/40"
+                  />
+                  <p className="text-center text-slate-500 font-black text-lg">:</p>
+                  <input
+                    type="number" min="0" max="20" placeholder="0"
+                    value={manualAway}
+                    onChange={e => setManualAway(e.target.value)}
+                    className="bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-center text-lg font-black text-white outline-none focus:border-green-500/40"
+                  />
+                </div>
+              </div>
+
+              {/* Joker */}
+              <button
+                onClick={() => setManualJoker(j => !j)}
+                className={`w-full h-10 rounded-xl text-sm font-black border transition-all ${
+                  manualJoker
+                    ? "bg-amber-600/50 text-amber-200 border-amber-500/40"
+                    : "bg-white/4 text-slate-400 border-white/8 hover:border-white/15"
+                }`}
+              >
+                🃏 ג׳וקר {manualJoker ? "(מופעל)" : "(לא)"}
+              </button>
+
+              {/* Bonus answer */}
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-500 font-bold">תשובת בונוס של המשתמש</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([true, false, null] as const).map((val) => (
+                    <button
+                      key={String(val)}
+                      onClick={() => setManualBonus(val)}
+                      className={`h-10 rounded-xl text-sm font-black border transition-all ${
+                        manualBonus === val
+                          ? val === true  ? "bg-emerald-600/60 text-emerald-200 border-emerald-500/40"
+                          : val === false ? "bg-red-600/60 text-red-200 border-red-500/40"
+                          :                 "bg-slate-600/60 text-slate-200 border-slate-500/40"
+                          : "bg-white/4 text-slate-400 border-white/8 hover:border-white/15"
+                      }`}
+                    >
+                      {val === true ? "✓ כן" : val === false ? "✗ לא" : "לא ענה"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Submit */}
+              <button
+                onClick={submitManualPrediction}
+                disabled={submitting || !selUserId || !selMatchId || manualHome === "" || manualAway === ""}
+                className="w-full h-12 rounded-xl text-sm font-black bg-green-700 hover:bg-green-600 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-green-900/20"
+              >
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    שומר...
+                  </span>
+                ) : "שמור ניחוש"}
+              </button>
+            </div>
+          )}
+
+          {manualMsg && (
+            <p className={`text-xs font-bold text-center rounded-xl py-2 px-3 ${
+              manualMsg.startsWith("✅") ? "text-emerald-300 bg-emerald-500/8 border border-emerald-500/15"
+              : manualMsg.startsWith("⚠️") ? "text-amber-300 bg-amber-500/8 border border-amber-500/15"
+              : "text-red-300 bg-red-500/8 border border-red-500/15"
+            }`}>
+              {manualMsg}
+            </p>
+          )}
         </div>
 
         {/* Reset data */}
