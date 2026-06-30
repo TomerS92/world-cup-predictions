@@ -83,8 +83,8 @@ export default function AdminPage() {
   };
 
   const submitManualPrediction = async () => {
-    const predHome = parseInt(manualHome, 10);
-    const predAway = parseInt(manualAway, 10);
+    const predHome = parseInt(manualHome || "0", 10);
+    const predAway = parseInt(manualAway || "0", 10);
     if (!selUserId || !selMatchId) { setManualMsg("❌ יש לבחור משתמש ומשחק"); return; }
     if (isNaN(predHome) || isNaN(predAway) || predHome < 0 || predAway < 0) { setManualMsg("❌ ניקוד לא תקין"); return; }
 
@@ -749,15 +749,15 @@ export default function AdminPage() {
                 })()}
                 <div className="grid grid-cols-3 items-center gap-2">
                   <input
-                    type="number" min="0" max="20" placeholder="0"
-                    value={manualHome}
+                    type="number" min="0" max="20"
+                    value={manualHome === "" ? "0" : manualHome}
                     onChange={e => setManualHome(e.target.value)}
                     className="bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-center text-lg font-black text-white outline-none focus:border-green-500/40"
                   />
                   <p className="text-center text-slate-500 font-black text-lg">:</p>
                   <input
-                    type="number" min="0" max="20" placeholder="0"
-                    value={manualAway}
+                    type="number" min="0" max="20"
+                    value={manualAway === "" ? "0" : manualAway}
                     onChange={e => setManualAway(e.target.value)}
                     className="bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-center text-lg font-black text-white outline-none focus:border-green-500/40"
                   />
@@ -801,7 +801,7 @@ export default function AdminPage() {
               {/* Submit */}
               <button
                 onClick={submitManualPrediction}
-                disabled={submitting || !selUserId || !selMatchId || manualHome === "" || manualAway === ""}
+                disabled={submitting || !selUserId || !selMatchId}
                 className={`w-full h-12 rounded-xl text-sm font-black transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${
                   overrideMode
                     ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/20 animate-pulse"
