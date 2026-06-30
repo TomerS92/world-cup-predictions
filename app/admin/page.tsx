@@ -45,6 +45,7 @@ export default function AdminPage() {
   const [manualBonus,   setManualBonus]   = useState<boolean | null>(null);
   const [submitting,    setSubmitting]    = useState(false);
   const [manualMsg,     setManualMsg]     = useState<string | null>(null);
+  const [overrideMode,  setOverrideMode]  = useState(false);
 
   const loadManualData = async () => {
     setLoadingManual(true);
@@ -91,14 +92,19 @@ export default function AdminPage() {
     if (!match) { setManualMsg("❌ משחק לא נמצא"); return; }
 
     const predId = `${selUserId}_${selMatchId}`;
-    const existing = await getDoc(doc(db, "Predictions", predId));
-    if (existing.exists()) {
-      setManualMsg("⚠️ ניחוש כבר קיים למשתמש ומשחק אלו — לא ניתן לדרוס");
+    const existingDoc = await getDoc(doc(db, "Predictions", predId));
+    if (existingDoc.exists() && !overrideMode) {
+      setOverrideMode(true);
+      setManualMsg("⚠️ ניחוש כבר קיים — לחץ שוב על 'שמור' כדי לדרוס אותו");
       return;
     }
 
     setSubmitting(true);
+    setOverrideMode(false);
     setManualMsg(null);
+    const oldPoints = existingDoc.exists()
+      ? ((existingDoc.data().pointsEarned ?? 0) + (existingDoc.data().bonusPointsEarned ?? 0))
+      : 0;
     try {
       const { homeScore: rH, awayScore: rA, bonusCorrectAnswer } = match;
       const isBullseye = predHome === rH && predAway === rA;
@@ -137,14 +143,15 @@ export default function AdminPage() {
         adminEntered: true, createdAt: new Date(),
       });
 
-      const totalToAdd = totalEarned + bonusPointsEarned;
-      if (totalToAdd > 0) {
-        await updateDoc(doc(db, "Users", selUserId), { totalPoints: increment(totalToAdd) });
+      const delta = (totalEarned + bonusPointsEarned) - oldPoints;
+      if (delta !== 0) {
+        await updateDoc(doc(db, "Users", selUserId), { totalPoints: increment(delta) });
       }
 
       const userName = manualUsers.find(u => u.id === selUserId)?.name ?? selUserId;
-      setManualMsg(`✅ נשמר! ${userName} קיבל ${totalToAdd} נק׳ — ${match.homeTeam} נגד ${match.awayTeam} (${predHome}:${predAway})`);
-      setSelUserId(""); setSelMatchId(""); setManualHome(""); setManualAway(""); setManualJoker(false); setManualBonus(null);
+      const deltaStr = delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : "ללא שינוי ב";
+      setManualMsg(`✅ נשמר! ${deltaStr} נק׳ ל-${userName} — ${match.homeTeam} נגד ${match.awayTeam} (${predHome}:${predAway})`);
+      setSelUserId(""); setSelMatchId(""); setManualHome(""); setManualAway(""); setManualJoker(false); setManualBonus(null); setOverrideMode(false);
     } catch (err: any) {
       setManualMsg(`❌ שגיאה: ${err.message}`);
     } finally {
@@ -700,7 +707,7 @@ export default function AdminPage() {
                 <p className="text-[11px] text-slate-500 font-bold">משתמש</p>
                 <select
                   value={selUserId}
-                  onChange={e => setSelUserId(e.target.value)}
+                  onChange={e => { setSelUserId(e.target.value); setOverrideMode(false); setManualMsg(null); }}
                   className="w-full bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-sm text-white appearance-none outline-none focus:border-green-500/40"
                 >
                   <option value="">— בחר משתמש —</option>
@@ -715,7 +722,7 @@ export default function AdminPage() {
                 <p className="text-[11px] text-slate-500 font-bold">משחק</p>
                 <select
                   value={selMatchId}
-                  onChange={e => setSelMatchId(e.target.value)}
+                  onChange={e => { setSelMatchId(e.target.value); setOverrideMode(false); setManualMsg(null); }}
                   className="w-full bg-black/30 border border-white/10 rounded-xl px-3 h-11 text-sm text-white appearance-none outline-none focus:border-green-500/40"
                 >
                   <option value="">— בחר משחק —</option>
@@ -730,6 +737,16 @@ export default function AdminPage() {
               {/* Score input */}
               <div className="space-y-1">
                 <p className="text-[11px] text-slate-500 font-bold">ניחוש תוצאה</p>
+                {(() => {
+                  const m = manualMatches.find(x => x.id === selMatchId);
+                  return m ? (
+                    <div className="grid grid-cols-3 gap-2 text-center mb-0.5">
+                      <p className="text-[11px] font-bold text-slate-300 truncate">{m.homeTeam}</p>
+                      <span />
+                      <p className="text-[11px] font-bold text-slate-300 truncate">{m.awayTeam}</p>
+                    </div>
+                  ) : null;
+                })()}
                 <div className="grid grid-cols-3 items-center gap-2">
                   <input
                     type="number" min="0" max="20" placeholder="0"
@@ -785,14 +802,18 @@ export default function AdminPage() {
               <button
                 onClick={submitManualPrediction}
                 disabled={submitting || !selUserId || !selMatchId || manualHome === "" || manualAway === ""}
-                className="w-full h-12 rounded-xl text-sm font-black bg-green-700 hover:bg-green-600 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-green-900/20"
+                className={`w-full h-12 rounded-xl text-sm font-black transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${
+                  overrideMode
+                    ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/20 animate-pulse"
+                    : "bg-green-700 hover:bg-green-600 text-white shadow-green-900/20"
+                }`}
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                     שומר...
                   </span>
-                ) : "שמור ניחוש"}
+                ) : overrideMode ? "⚠️ לחץ שוב לאישור דריסה" : "שמור ניחוש"}
               </button>
             </div>
           )}

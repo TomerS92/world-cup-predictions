@@ -30,7 +30,7 @@ export default function RulesPage() {
               <span>⚽</span> איך משחקים?
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
-              נחש את תוצאת כל משחק לפני שריקת הפתיחה. ניחושים ננעלים אוטומטית כשהמשחק מתחיל.
+              נחש את תוצאת כל משחק לפני שריקת הפתיחה. ניחושים ננעלים אוטומטית <span className="text-white font-bold">15 דקות לפני</span> תחילת המשחק.
               בנוסף, כל משחק מגיע עם <span className="text-white font-bold">שאלת בונוס</span> — שאלת כן/לא שמוסיפה עוד נקודות.
             </p>
           </div>
