@@ -38,6 +38,9 @@ export default function RulesPage() {
           {/* Main scoring */}
           <div>
             <h3 className="text-sm font-black text-white flex items-center gap-2 mb-3">🎯 ניקוד בסיסי</h3>
+            <p className="text-xs text-slate-500 mb-3">
+              הניקוד מחושב לפי תוצאת <span className="text-white font-bold">90 הדקות בלבד</span> — ללא הארכות או פנדלים. אם המשחק הוכרע בהארכה או בפנדלים, התוצאה הרשמית מוצגת לצד תוצאת 90 הדקות.
+            </p>
             <div className="space-y-2.5">
               {[
                 { color:"emerald", pts:"6", title:"פגיעה בול", desc:"תוצאה מדויקת לחלוטין — מספר השערים של כל קבוצה.", ex:"ניחשת 2-1 ← נגמר 2-1" },
