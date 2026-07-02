@@ -12,6 +12,10 @@ interface ScoredPrediction {
   predictedAwayScore: number;
   realHomeScore?: number;
   realAwayScore?: number;
+  fullFinalHomeScore?: number;
+  fullFinalAwayScore?: number;
+  extraTime?: boolean;
+  penalties?: boolean;
   pointsEarned?: number;
   pointsBreakdown?: string;
   bonusAnswer?: boolean | null;
@@ -116,6 +120,13 @@ export function HistoryTab({ userId }: { userId: string }) {
                       <span className={`text-sm font-black tabular-nums ${isBull ? "text-emerald-400" : "text-slate-500"}`}>
                         {p.realHomeScore} – {p.realAwayScore}
                       </span>
+                      {p.extraTime && (
+                        <span className="text-[9px] font-bold text-slate-600 border border-white/8 px-1 py-0.5 rounded leading-none">
+                          {p.penalties ? "פנד׳" : "אח״מ"}
+                          {p.fullFinalHomeScore !== undefined && p.fullFinalHomeScore !== p.realHomeScore &&
+                            ` (${p.fullFinalHomeScore}-${p.fullFinalAwayScore})`}
+                        </span>
+                      )}
                     </>
                   )}
                   {isBull && <span className="text-[10px] font-black text-emerald-400">בול! 🎯</span>}

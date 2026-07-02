@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { getEspnScoreboardUrl, activeConfig } from "@/lib/config";
 import { getBonusQuestion, detectBonusAnswer, ESPNDetail, type BonusQuestion } from "@/lib/bonusQuestions";
+import { getRegulationScore } from "@/lib/espnUtils";
 
 export default function AdminPage() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -31,7 +32,9 @@ export default function AdminPage() {
   interface ManualUser  { id: string; name: string; }
   interface ManualMatch {
     id: string; homeTeam: string; awayTeam: string;
-    homeScore: number; awayScore: number;
+    homeScore: number; awayScore: number;         // full final score (display)
+    regHomeScore: number; regAwayScore: number;   // 90-min regulation (scoring)
+    extraTime: boolean; penalties: boolean;
     bonusCorrectAnswer: boolean | null;
   }
   const [manualUsers,   setManualUsers]   = useState<ManualUser[]>([]);
@@ -63,14 +66,22 @@ export default function AdminPage() {
         const comp     = e.competitions[0];
         const homeComp = comp.competitors.find((c: any) => c.homeAway === "home");
         const awayComp = comp.competitors.find((c: any) => c.homeAway === "away");
+        const fullHome = parseInt(homeComp?.score ?? "0", 10);
+        const fullAway = parseInt(awayComp?.score ?? "0", 10);
+        const statusDesc = e.status?.type?.description ?? "";
+        const regResult = await getRegulationScore(e.id, statusDesc, fullHome, fullAway);
         const snap     = await getDocs(query(collection(db, "Predictions"), where("matchId", "==", e.id)));
         const known    = snap.docs.find(d => d.data().bonusCorrectAnswer != null);
         list.push({
           id: e.id,
-          homeTeam:  homeComp?.team?.displayName ?? "?",
-          awayTeam:  awayComp?.team?.displayName ?? "?",
-          homeScore: parseInt(homeComp?.score ?? "0", 10),
-          awayScore: parseInt(awayComp?.score ?? "0", 10),
+          homeTeam:     homeComp?.team?.displayName ?? "?",
+          awayTeam:     awayComp?.team?.displayName ?? "?",
+          homeScore:    fullHome,
+          awayScore:    fullAway,
+          regHomeScore: regResult.homeScore,
+          regAwayScore: regResult.awayScore,
+          extraTime:    regResult.extraTime,
+          penalties:    regResult.penalties,
           bonusCorrectAnswer: known ? known.data().bonusCorrectAnswer : null,
         });
       }
@@ -106,7 +117,8 @@ export default function AdminPage() {
       ? ((existingDoc.data().pointsEarned ?? 0) + (existingDoc.data().bonusPointsEarned ?? 0))
       : 0;
     try {
-      const { homeScore: rH, awayScore: rA, bonusCorrectAnswer } = match;
+      const { homeScore: rH_full, awayScore: rA_full, regHomeScore: rH, regAwayScore: rA,
+              extraTime, penalties, bonusCorrectAnswer } = match;
       const isBullseye = predHome === rH && predAway === rA;
       const isDiff     = predHome - predAway === rH - rA;
       const isDir      = (predHome > predAway && rH > rA) ||
@@ -140,6 +152,7 @@ export default function AdminPage() {
         bonusPointsEarned,
         pointsEarned: totalEarned, pointsBreakdown: breakdown,
         realHomeScore: rH, realAwayScore: rA,
+        ...(extraTime ? { fullFinalHomeScore: rH_full, fullFinalAwayScore: rA_full, extraTime: true, penalties } : {}),
         adminEntered: true, createdAt: new Date(),
       });
 
@@ -438,8 +451,12 @@ export default function AdminPage() {
         const comp = match.competitions[0];
         const home = comp.competitors.find((c: any) => c.homeAway === "home");
         const away = comp.competitors.find((c: any) => c.homeAway === "away");
-        const realHomeScore = parseInt(home.score, 10);
-        const realAwayScore = parseInt(away.score, 10);
+        const fullHomeScore  = parseInt(home?.score ?? "0", 10);
+        const fullAwayScore  = parseInt(away?.score ?? "0", 10);
+        const statusDesc     = match.status?.type?.description ?? "";
+        const regResult      = await getRegulationScore(matchId, statusDesc, fullHomeScore, fullAwayScore);
+        const realHomeScore  = regResult.homeScore;
+        const realAwayScore  = regResult.awayScore;
 
         const predictionsSnap = await getDocs(
           query(collection(db, "Predictions"), where("matchId", "==", matchId))
@@ -447,7 +464,13 @@ export default function AdminPage() {
 
         for (const predictionDoc of predictionsSnap.docs) {
           const d = predictionDoc.data();
-          if (d.pointsEarned !== undefined) continue;
+
+          const needsRescoring =
+            regResult.extraTime &&
+            d.pointsEarned !== undefined &&
+            (d.realHomeScore !== realHomeScore || d.realAwayScore !== realAwayScore);
+
+          if (!needsRescoring && d.pointsEarned !== undefined) continue;
 
           const guessedHome = d.predictedHomeScore;
           const guessedAway = d.predictedAwayScore;
@@ -478,17 +501,28 @@ export default function AdminPage() {
             breakdown = `🃏 ג'וקר: (${breakdown}) x2`;
           }
 
-          await updateDoc(predictionDoc.ref, {
+          const docUpdate: Record<string, any> = {
             pointsEarned: totalEarned, pointsBreakdown: breakdown,
             realHomeScore, realAwayScore,
-          });
+          };
+          if (regResult.extraTime) {
+            docUpdate.fullFinalHomeScore = regResult.fullHomeScore;
+            docUpdate.fullFinalAwayScore = regResult.fullAwayScore;
+            docUpdate.extraTime = true;
+            docUpdate.penalties = regResult.penalties;
+          }
+          await updateDoc(predictionDoc.ref, docUpdate);
 
           const userRef = doc(db, "Users", d.userId);
-          const userSnap = await getDoc(userRef);
-          let streak = userSnap.exists() ? (userSnap.data().currentStreak ?? 0) : 0;
-          if (basePoints > 0) streak += 1; else streak = 0;
-
-          await updateDoc(userRef, { totalPoints: increment(totalEarned), currentStreak: streak });
+          if (needsRescoring) {
+            const delta = totalEarned - (d.pointsEarned as number);
+            if (delta !== 0) await updateDoc(userRef, { totalPoints: increment(delta) });
+          } else {
+            const userSnap = await getDoc(userRef);
+            let streak = userSnap.exists() ? (userSnap.data().currentStreak ?? 0) : 0;
+            if (basePoints > 0) streak += 1; else streak = 0;
+            await updateDoc(userRef, { totalPoints: increment(totalEarned), currentStreak: streak });
+          }
           totalProcessed++;
         }
       }
@@ -728,7 +762,8 @@ export default function AdminPage() {
                   <option value="">— בחר משחק —</option>
                   {manualMatches.map(m => (
                     <option key={m.id} value={m.id}>
-                      {m.homeTeam} {m.homeScore}:{m.awayScore} {m.awayTeam}
+                      {m.homeTeam} {m.regHomeScore}:{m.regAwayScore} {m.awayTeam}
+                      {m.extraTime ? (m.penalties ? " (פנד׳)" : " (אח״מ)") : ""}
                     </option>
                   ))}
                 </select>

@@ -6,6 +6,7 @@ import {
 } from "firebase/firestore";
 import { getEspnScoreboardUrl } from "@/lib/config";
 import { getBonusQuestion, detectBonusAnswer, ESPNDetail } from "@/lib/bonusQuestions";
+import { getRegulationScore } from "@/lib/espnUtils";
 
 // ─── Firebase client init (server-side) ──────────────────────────────────────
 function getDb() {
@@ -52,8 +53,12 @@ export async function GET() {
     const comp                = match.competitions[0];
     const homeComp            = comp.competitors.find((c: any) => c.homeAway === "home");
     const awayComp            = comp.competitors.find((c: any) => c.homeAway === "away");
-    const realHome            = parseInt(homeComp.score, 10);
-    const realAway            = parseInt(awayComp.score, 10);
+    const fullHome            = parseInt(homeComp.score, 10);
+    const fullAway            = parseInt(awayComp.score, 10);
+    const statusDesc          = match.status?.type?.description ?? "";
+    const regResult           = await getRegulationScore(matchId, statusDesc, fullHome, fullAway);
+    const realHome            = regResult.homeScore;
+    const realAway            = regResult.awayScore;
     const details: ESPNDetail[] = comp.details ?? [];
     const homeTeamName: string = homeComp.team?.displayName ?? "";
     const awayTeamName: string = awayComp.team?.displayName ?? "";
@@ -69,14 +74,21 @@ export async function GET() {
 
     for (const predDoc of predsSnap.docs) {
       const pred = predDoc.data();
-      // Skip already-scored predictions (both main + bonus)
-      if (pred.pointsEarned !== undefined && pred.bonusPointsEarned !== undefined) continue;
+
+      // Re-score if: match went to ET/penalties AND the stored score is the full score (not regulation)
+      const needsRescoring =
+        regResult.extraTime &&
+        pred.pointsEarned !== undefined &&
+        (pred.realHomeScore !== realHome || pred.realAwayScore !== realAway);
+
+      // Skip already-scored predictions unless they need re-scoring for regulation
+      if (!needsRescoring && pred.pointsEarned !== undefined && pred.bonusPointsEarned !== undefined) continue;
 
       let needsUpdate = false;
       const updates: Record<string, any> = {};
 
-      // ── Main prediction scoring ─────────────────────────────────────────────
-      if (pred.pointsEarned === undefined) {
+      // ── Main prediction scoring (fresh) or re-scoring (ET correction) ───────
+      if (pred.pointsEarned === undefined || needsRescoring) {
         const g1 = pred.predictedHomeScore as number;
         const g2 = pred.predictedAwayScore as number;
         let base = 0, extra = 0;
@@ -105,11 +117,22 @@ export async function GET() {
         updates.pointsBreakdown = breakdown;
         updates.realHomeScore   = realHome;
         updates.realAwayScore   = realAway;
+        if (regResult.extraTime) {
+          updates.fullFinalHomeScore = regResult.fullHomeScore;
+          updates.fullFinalAwayScore = regResult.fullAwayScore;
+          updates.extraTime  = true;
+          updates.penalties  = regResult.penalties;
+        }
         needsUpdate = true;
 
-        // Update user's total points
         const userRef = doc(db, "Users", pred.userId);
-        await updateDoc(userRef, { totalPoints: increment(total) });
+        if (needsRescoring) {
+          // Apply delta to avoid double-counting
+          const delta = total - (pred.pointsEarned as number);
+          if (delta !== 0) await updateDoc(userRef, { totalPoints: increment(delta) });
+        } else {
+          await updateDoc(userRef, { totalPoints: increment(total) });
+        }
       }
 
       // ── Bonus question scoring ──────────────────────────────────────────────
